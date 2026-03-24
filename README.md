@@ -1,50 +1,368 @@
 # Education Management Frontend
 
-## Architecture Overview
+Next.js frontend for the Education Management SaaS platform. This application provides the public marketing site, authentication flows, and the protected multi-tenant dashboard used by super admins, organization admins, and staff users.
 
-This frontend is a Next.js App Router application structured around a contract-driven feature architecture.
+## Overview
 
-- `app`: route groups for public marketing pages and protected dashboard modules
-- `src/components`: shared UI, layout, table, chart, feedback, and form building blocks
-- `src/features`: feature-scoped API clients, schemas, hooks, and components
-- `src/lib`: typed API layer, auth/session helpers, permission utilities, formatters, constants, and validators
-- `src/providers`: React Query and auth providers
-- `src/types`: shared DTO-aligned request and response types
+This frontend includes:
 
-## Page And Module Breakdown
+- public marketing pages
+- authentication flows
+- protected dashboard layout
+- tenant-aware navigation
+- role and permission-aware UI gating
+- operational CRUD screens
+- analytics and chart-driven reporting
+- contact inquiry capture
+- student detail dashboard
 
-- Public: landing, pricing, about, contact, login, forgot password, reset password
-- Protected: dashboard, users, roles, permissions, students, student detail, batches, batch detail, fees, attendance, reminders, reports, settings, profile
-- System: unauthorized, loading, global error, not-found
+The application is built to work directly against the NestJS backend in the sibling backend repository.
 
-## API Integration Assumptions
+## Tech Stack
 
-- Backend base URL is exposed via `NEXT_PUBLIC_API_BASE_URL`
-- API responses are wrapped as `success`, `message`, `data`, and optional `meta`
-- List endpoints use pagination params `page`, `limit`, `search`, `sortBy`, `sortOrder`
-- Auth supports JWT access and refresh tokens through `/auth/login`, `/auth/refresh`, and `/auth/me`
-- CRUD payloads align with the DTO field names present in `education-management-backend`
-- Some analytics are derived client-side from raw records because the current backend report surface is intentionally minimal
+- Next.js App Router
+- TypeScript
+- React 19
+- TanStack React Query
+- Axios
+- React Hook Form
+- Zod
+- Recharts
+- Tailwind CSS
 
-## Auth And Permissions Strategy
+## Product Surfaces
 
-- Session state is stored in local storage and hydrated through `AuthProvider`
-- Axios injects the bearer token automatically
-- A refresh-token retry strategy is applied on `401` responses
-- Protected routes are guarded with `AuthGuard`
-- Sidebar navigation and button visibility are filtered by permissions through centralized permission helpers
-- Unauthorized states route to `/unauthorized`
+### Public Pages
 
-## Reusable Component Inventory
+- landing page
+- about
+- pricing
+- contact
+- login
+- forgot password
+- reset password
+- register
 
-- Layout: `AppSidebar`, `AppHeader`, `ProtectedShell`, `AuthGuard`
-- Feedback: `LoadingState`, `ErrorState`, `EmptyState`
-- Data display: `DataTable`, `MetricCard`, `ChartCard`, `Badge`
-- Forms: `FormField`, shadcn-style `Input`, `Textarea`, `Dialog`, `Select`
-- Shared: `PageHeader`, `FilterBar`, `PermissionGate`
+### Dashboard Pages
 
-## Run
+- overview
+- users
+- students
+- student detail dashboard
+- batches
+- batch detail
+- fee plans
+- fees
+- attendance
+- reminders
+- reports
+- activity logs
+- profile
+- settings
+- organizations
+- roles
+- permissions
+- inquiries
 
-1. Install dependencies
-2. Copy `.env.example` to `.env.local`
-3. Run `npm run dev`
+## Access Model
+
+The frontend reflects the same access model as the backend:
+
+- `SUPER_ADMIN`
+  Sees platform modules such as organizations, roles, permissions, and inquiries.
+- `ADMIN`
+  Operates inside a single organization and can manage tenant settings and operations.
+- `STAFF`
+  Sees only modules allowed by assigned permissions.
+
+UI behavior:
+
+- sidebar navigation is filtered by role and permission
+- mutation controls are hidden or disabled when access is not allowed
+- tenant context is shown through organization scope banners
+- some screens degrade gracefully when supporting modules are unavailable
+
+## Architecture Summary
+
+The frontend uses a contract-driven feature architecture.
+
+Main layers:
+
+- `app`
+  Next.js route groups and page entry points.
+- `src/components`
+  Shared UI building blocks, layout components, cards, charts, tables, and forms.
+- `src/features`
+  Feature-scoped API clients and schemas.
+- `src/lib`
+  API client, constants, auth/session helpers, permissions, formatters, and utilities.
+- `src/providers`
+  Auth and React Query providers.
+- `src/types`
+  Shared API/domain/request types aligned to backend DTO contracts.
+
+## Folder Structure
+
+```text
+app/
+  (public)/
+  (dashboard)/
+  layout.tsx
+  globals.css
+src/
+  components/
+  features/
+  hooks/
+  lib/
+  providers/
+  types/
+pages/
+public/
+```
+
+Important note:
+
+- the active Next.js route tree is the root `app/` directory
+- `src/app` is not the routed application tree in this repo
+
+## UI And UX Highlights
+
+This frontend includes:
+
+- public marketing pages with richer product messaging
+- immediate navigation feedback loader
+- chart-driven operations screens
+- reusable metric cards
+- debounced search across dashboard tables
+- filter bars with export support
+- tenant-aware settings and organization scope messaging
+- detailed student operational dashboard
+
+## API Integration
+
+The frontend talks to the backend through a shared Axios client.
+
+Behavior:
+
+- base URL comes from `NEXT_PUBLIC_API_BASE_URL`
+- bearer token is injected automatically
+- refresh token flow retries on `401`
+- API responses are expected in wrapped backend format
+- CRUD contracts align to backend DTO field names
+
+Base URL example:
+
+- local: `http://localhost:3000/v1`
+- production: `https://your-backend.up.railway.app/v1`
+
+## Session Handling
+
+Session behavior:
+
+- access and refresh tokens are stored client-side
+- session is hydrated through `AuthProvider`
+- Axios refreshes tokens when possible
+- failed refresh clears the local session
+
+Key files:
+
+- [`client.ts`](/home/usman/Desktop/project/education-management-frontend/src/lib/api/client.ts)
+- [`session.ts`](/home/usman/Desktop/project/education-management-frontend/src/lib/auth/session.ts)
+- [`auth-provider.tsx`](/home/usman/Desktop/project/education-management-frontend/src/providers/auth-provider.tsx)
+
+## Shared Component Inventory
+
+Layout and navigation:
+
+- `AppSidebar`
+- `AppHeader`
+- `ProtectedShell`
+- `SidebarNav`
+- `SiteFooter`
+
+Feedback:
+
+- `LoadingState`
+- `ErrorState`
+- `EmptyState`
+- `NavigationProgress`
+
+Data display:
+
+- `DataTable`
+- `MetricCard`
+- `ChartCard`
+- `Badge`
+
+Forms:
+
+- `FormField`
+- `Dialog`
+- `Input`
+- `Textarea`
+- `Select`
+
+Shared dashboard helpers:
+
+- `PageHeader`
+- `FilterBar`
+- `OrganizationScopeBanner`
+
+## Environment Variables
+
+Copy [`.env.example`](/home/usman/Desktop/project/education-management-frontend/.env.example) to `.env.local`:
+
+```env
+NEXT_PUBLIC_APP_NAME="EduFlow SaaS"
+NEXT_PUBLIC_API_BASE_URL="http://localhost:3000/v1"
+```
+
+Production example:
+
+```env
+NEXT_PUBLIC_APP_NAME="EduFlow SaaS"
+NEXT_PUBLIC_API_BASE_URL="https://your-backend.up.railway.app/v1"
+```
+
+## Local Development Setup
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Create env file
+
+```bash
+cp .env.example .env.local
+```
+
+### 3. Start development server
+
+```bash
+npm run dev
+```
+
+Frontend runs on:
+
+- `http://localhost:3001` or `http://localhost:3000` depending on your local port usage
+
+Ensure the backend is also running and `NEXT_PUBLIC_API_BASE_URL` points to it.
+
+## Useful Commands
+
+Install:
+
+```bash
+npm install
+```
+
+Run dev:
+
+```bash
+npm run dev
+```
+
+Build:
+
+```bash
+npm run build
+```
+
+Run production build locally:
+
+```bash
+npm run start
+```
+
+Lint:
+
+```bash
+npm run lint
+```
+
+Typecheck:
+
+```bash
+npm run typecheck
+```
+
+## Deployment Notes
+
+Recommended deployment:
+
+- frontend on Vercel
+- backend on Railway
+
+### Vercel Configuration
+
+Framework:
+
+- `Next.js`
+
+Build command:
+
+```bash
+npm run build
+```
+
+Install command:
+
+```bash
+npm install
+```
+
+Required Vercel environment variables:
+
+```env
+NEXT_PUBLIC_APP_NAME=EduFlow SaaS
+NEXT_PUBLIC_API_BASE_URL=https://your-backend.up.railway.app/v1
+```
+
+## Functional Highlights
+
+### Public Site
+
+- stronger About, Pricing, and Contact pages
+- pricing aligned to `$1 per module per user`
+- contact inquiry submission wired to backend
+- footer on public pages
+
+### Dashboard
+
+- tenant-aware operations
+- super-admin platform sections
+- stat cards on major modules
+- chart-ready reports
+- student detail operational dashboard
+- CSV student import with sample download
+- reminder template and automation management
+- inquiry review for super admin
+
+## Current Integration Assumptions
+
+This frontend assumes:
+
+- backend versioned API routes live under `/v1`
+- backend wraps data in a standard response shape
+- backend supports JWT login, refresh, and current-user endpoints
+- user payload contains roles, permissions, and organization context
+
+## Operational Notes
+
+- if dashboard pages feel slower in development, compare with `npm run build && npm run start`
+- route loading feedback is implemented globally
+- searches are debounced to avoid refetching on every keystroke
+- some dashboard analytics are fetched from dedicated report endpoints
+- student detail dashboard gracefully handles unavailable supporting modules
+
+## Related Repository
+
+This frontend is intended to run with:
+
+- [`education-management-backend`](/home/usman/Desktop/project/education-management-backend)
+
+## License
+
+This project is currently private/internal and has no explicit open-source license declared.
