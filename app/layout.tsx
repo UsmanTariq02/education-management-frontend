@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { APP_NAME } from "@/lib/constants/app";
 import { AppProvider } from "@/providers/app-provider";
 import "./globals.css";
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={manrope.variable}>
         <AppProvider>{children}</AppProvider>
+        <Analytics />
       </body>
     </html>
   );
