@@ -1,0 +1,455 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { ShieldCheck, UserCheck, UserCog, UserX } from "lucide-react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { organizationsApi } from "@/features/organizations/api/organizations-api";
+import { rolesApi } from "@/features/roles/api/roles-api";
+import { usersApi } from "@/features/users/api/users-api";
+import { userSchema, type UserSchema } from "@/features/users/schemas/user-schema";
+import { normalizeApiError } from "@/lib/api/errors";
+import type { UpdateUserDto } from "@/types/dto";
+import type { User } from "@/types/domain";
+import { usePermission } from "@/hooks/use-permission";
+import { DataTable } from "@/components/tables/data-table";
+import { FilterBar } from "@/components/shared/filter-bar";
+import { PageHeader } from "@/components/shared/page-header";
+import { ErrorState } from "@/components/feedback/error-state";
+import { LoadingState } from "@/components/feedback/loading-state";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { FormField } from "@/components/forms/form-field";
+import { Badge } from "@/components/ui/badge";
+import { formatDate } from "@/lib/formatters";
+import { useAuth } from "@/providers/auth-provider";
+import { OrganizationScopeBanner } from "@/components/shared/organization-scope-banner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MetricCard } from "@/components/cards/metric-card";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+
+export default function UsersPage() {
+  const { user } = useAuth();
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageSize = 10;
+  const [open, setOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const canManage = usePermission("users.update");
+  const canCreate = usePermission("users.create");
+  const queryClient = useQueryClient();
+  const assignableRoleNames = useMemo(() => {
+    if (user?.roles.includes("SUPER_ADMIN")) {
+      return new Set(["SUPER_ADMIN", "ADMIN", "STAFF"]);
+    }
+
+    if (user?.roles.includes("ADMIN")) {
+      return new Set(["ADMIN", "STAFF"]);
+    }
+
+    return new Set(["STAFF"]);
+  }, [user?.roles]);
+
+  const usersQuery = useQuery({
+    queryKey: ["users", debouncedSearch, pageIndex, pageSize],
+    queryFn: () => usersApi.list({ page: pageIndex + 1, limit: pageSize, search: debouncedSearch }),
+  });
+  const rolesQuery = useQuery({ queryKey: ["roles", "users-page"], queryFn: rolesApi.list });
+  const organizationsQuery = useQuery({
+    queryKey: ["organizations", "users-page"],
+    queryFn: () => organizationsApi.list({ page: 1, limit: 100 }),
+    enabled: user?.roles.includes("SUPER_ADMIN") ?? false,
+  });
+
+  const form = useForm<UserSchema>({
+    resolver: zodResolver(userSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      organizationId: undefined,
+      isActive: true,
+      roleIds: [],
+    },
+  });
+
+  const mutation = useMutation<unknown, Error, UserSchema>({
+    mutationFn: async (values: UserSchema) => {
+      if (!editingUser && !values.password) {
+        throw new Error("Password is required for new users");
+      }
+
+      const payload: UpdateUserDto = {
+        ...values,
+        password: values.password || undefined,
+      };
+
+      if (editingUser) {
+        return usersApi.update(editingUser.id, payload);
+      }
+      return usersApi.create({
+        firstName: values.firstName,
+        lastName: values.lastName,
+        email: values.email,
+        organizationId: values.organizationId,
+        isActive: values.isActive,
+        roleIds: values.roleIds,
+        password: values.password ?? "",
+      });
+    },
+    onSuccess: () => {
+      toast.success(editingUser ? "User updated" : "User created");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setOpen(false);
+      setEditingUser(null);
+      form.reset();
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ targetUser, isActive }: { targetUser: User; isActive: boolean }) =>
+      usersApi.update(targetUser.id, { isActive }),
+    onSuccess: (_, variables) => {
+      toast.success(variables.isActive ? "User activated" : "User deactivated");
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      if (selectedUser?.id === variables.targetUser.id) {
+        setSelectedUser({
+          ...variables.targetUser,
+          isActive: variables.isActive,
+        });
+      }
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const assignableRoles = useMemo(
+    () => (rolesQuery.data ?? []).filter((role) => assignableRoleNames.has(role.name)),
+    [assignableRoleNames, rolesQuery.data],
+  );
+
+  const canManageTargetUser = (targetUser: User): boolean => targetUser.roles.every((role) => assignableRoleNames.has(role));
+
+  const columns = useMemo<Array<ColumnDef<User>>>(
+    () => [
+      {
+        accessorKey: "firstName",
+        header: "User",
+        cell: ({ row }) => (
+          <div>
+            <p className="font-medium">{`${row.original.firstName} ${row.original.lastName}`}</p>
+            <p className="text-xs text-muted-foreground">{row.original.email}</p>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "organizationName",
+        header: "Organization",
+        cell: ({ row }) => row.original.organizationName ?? <span className="text-muted-foreground">Platform</span>,
+      },
+      {
+        accessorKey: "roles",
+        header: "Roles",
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-1">
+            {row.original.roles.map((role) => (
+              <Badge key={role} variant="outline">
+                {role}
+              </Badge>
+            ))}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "isActive",
+        header: "Status",
+        cell: ({ row }) => <Badge variant={row.original.isActive ? "success" : "warning"}>{row.original.isActive ? "Active" : "Inactive"}</Badge>,
+      },
+      {
+        accessorKey: "createdAt",
+        header: "Created",
+        cell: ({ row }) => formatDate(row.original.createdAt),
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => (
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedUser(row.original)}>
+              View
+            </Button>
+            {canManage ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!canManageTargetUser(row.original)}
+                  onClick={() => {
+                    if (!canManageTargetUser(row.original)) {
+                      return;
+                    }
+                    setEditingUser(row.original);
+                    form.reset({
+                      firstName: row.original.firstName,
+                      lastName: row.original.lastName,
+                      email: row.original.email,
+                      password: "",
+                      organizationId: row.original.organizationId ?? undefined,
+                      isActive: row.original.isActive,
+                      roleIds: rolesQuery.data
+                        ?.filter((role) => row.original.roles.includes(role.name))
+                        .map((role) => role.id) ?? [],
+                    });
+                    setOpen(true);
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!canManageTargetUser(row.original) || toggleActiveMutation.isPending}
+                  onClick={() => {
+                    if (!canManageTargetUser(row.original)) {
+                      return;
+                    }
+                    toggleActiveMutation.mutate({
+                      targetUser: row.original,
+                      isActive: !row.original.isActive,
+                    });
+                  }}
+                >
+                  {row.original.isActive ? "Deactivate" : "Activate"}
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ),
+      },
+    ],
+    [assignableRoleNames, canManage, form, rolesQuery.data],
+  );
+
+  const filteredUsers = useMemo(() => {
+    const items = usersQuery.data?.items ?? [];
+
+    return items.filter((item) => {
+      const matchesStatus =
+        statusFilter === "ALL" ? true : statusFilter === "ACTIVE" ? item.isActive : !item.isActive;
+      const matchesRole = roleFilter === "ALL" ? true : item.roles.includes(roleFilter);
+
+      return matchesStatus && matchesRole;
+    });
+  }, [roleFilter, statusFilter, usersQuery.data]);
+
+  const hasLocalFilters = statusFilter !== "ALL" || roleFilter !== "ALL";
+
+  const exportRows = useMemo(
+    () =>
+      filteredUsers.map((user) => ({
+        Name: `${user.firstName} ${user.lastName}`,
+        Email: user.email,
+        Roles: user.roles.join(", "),
+        Status: user.isActive ? "Active" : "Inactive",
+        Created: formatDate(user.createdAt),
+      })),
+    [filteredUsers],
+  );
+
+  const userStats = useMemo(() => {
+    return {
+      totalUsers: filteredUsers.length,
+      activeUsers: filteredUsers.filter((item) => item.isActive).length,
+      inactiveUsers: filteredUsers.filter((item) => !item.isActive).length,
+      totalRolesAssigned: filteredUsers.reduce((sum, item) => sum + item.roles.length, 0),
+    };
+  }, [filteredUsers]);
+
+  if (usersQuery.isLoading) return <LoadingState rows={6} />;
+  if (usersQuery.isError || !usersQuery.data) return <ErrorState description="Users could not be loaded." onRetry={() => usersQuery.refetch()} />;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader eyebrow="Access control" title="Users management" description="Manage user accounts, activation states, and role assignment." />
+      <OrganizationScopeBanner moduleLabel="User access control" />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard title="Visible users" value={String(userStats.totalUsers)} helper="Users in the current page scope" icon={UserCog} tone="sky" />
+        <MetricCard title="Active users" value={String(userStats.activeUsers)} helper="Accounts currently enabled" icon={UserCheck} tone="emerald" />
+        <MetricCard title="Inactive users" value={String(userStats.inactiveUsers)} helper="Accounts blocked from login" icon={UserX} tone="amber" />
+        <MetricCard title="Role assignments" value={String(userStats.totalRolesAssigned)} helper="Total role entries across listed users" icon={ShieldCheck} tone="violet" />
+      </div>
+      <FilterBar
+        search={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setPageIndex(0);
+        }}
+        searchPlaceholder="Search users by name or email..."
+        filters={
+          <>
+            <select
+              className="h-10 rounded-xl border bg-background px-3 text-sm"
+              value={statusFilter}
+              onChange={(event) => {
+                setStatusFilter(event.target.value);
+                setPageIndex(0);
+              }}
+            >
+              <option value="ALL">All statuses</option>
+              <option value="ACTIVE">Active only</option>
+              <option value="INACTIVE">Inactive only</option>
+            </select>
+            <select
+              className="h-10 rounded-xl border bg-background px-3 text-sm"
+              value={roleFilter}
+              onChange={(event) => {
+                setRoleFilter(event.target.value);
+                setPageIndex(0);
+              }}
+            >
+              <option value="ALL">All roles</option>
+              {assignableRoles.map((role) => (
+                <option key={role.id} value={role.name}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </>
+        }
+        exportConfig={{ filename: "users-management", rows: exportRows }}
+        action={
+          canCreate ? (
+            <Dialog
+              open={open}
+              onOpenChange={(nextOpen) => {
+                setOpen(nextOpen);
+                if (!nextOpen) {
+                  setEditingUser(null);
+                  form.reset();
+                }
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button>Create user</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{editingUser ? "Edit user" : "Create user"}</DialogTitle>
+                  <DialogDescription>Fields align with `CreateUserDto` and `UpdateUserDto` from the NestJS backend.</DialogDescription>
+                </DialogHeader>
+                <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+                  <FormField label="First name" required error={form.formState.errors.firstName}>
+                    <Input {...form.register("firstName")} />
+                  </FormField>
+                  <FormField label="Last name" required error={form.formState.errors.lastName}>
+                    <Input {...form.register("lastName")} />
+                  </FormField>
+                  <FormField label="Email" required error={form.formState.errors.email} className="md:col-span-2">
+                    <Input type="email" {...form.register("email")} />
+                  </FormField>
+                  {user?.roles.includes("SUPER_ADMIN") ? (
+                    <div className="space-y-2 md:col-span-2">
+                      <p className="text-sm font-medium">Organization</p>
+                      <Select value={form.watch("organizationId")} onValueChange={(value) => form.setValue("organizationId", value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select organization" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {organizationsQuery.data?.items.map((organization) => (
+                            <SelectItem key={organization.id} value={organization.id}>
+                              {organization.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {form.formState.errors.organizationId ? (
+                        <p className="text-xs text-destructive">{form.formState.errors.organizationId.message}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <FormField label="Password" required={!editingUser} error={form.formState.errors.password} className="md:col-span-2">
+                    <Input type="password" {...form.register("password")} />
+                  </FormField>
+                  <div className="space-y-2 md:col-span-2">
+                    <p className="text-sm font-medium">Roles</p>
+                    <div className="grid gap-2 rounded-xl border p-4">
+                      {assignableRoles.map((role) => (
+                        <label key={role.id} className="flex items-center gap-3 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={form.watch("roleIds").includes(role.id)}
+                            onChange={(event) => {
+                              const current = form.getValues("roleIds");
+                              form.setValue(
+                                "roleIds",
+                                event.target.checked ? [...current, role.id] : current.filter((item) => item !== role.id),
+                                { shouldValidate: true, shouldDirty: true },
+                              );
+                            }}
+                          />
+                          <span>{role.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {form.formState.errors.roleIds ? <p className="text-xs text-destructive">{form.formState.errors.roleIds.message}</p> : null}
+                  </div>
+                  <label className="flex items-center gap-3 text-sm md:col-span-2">
+                    <input type="checkbox" checked={form.watch("isActive")} onChange={(event) => form.setValue("isActive", event.target.checked, { shouldDirty: true })} />
+                    <span>User account is active</span>
+                  </label>
+                  <div className="md:col-span-2 flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={mutation.isPending}>
+                      {mutation.isPending ? "Saving..." : editingUser ? "Update user" : "Create user"}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          ) : null
+        }
+      />
+      <DataTable
+        data={filteredUsers}
+        columns={columns}
+        pageCount={hasLocalFilters ? 1 : Math.ceil(usersQuery.data.total / usersQuery.data.limit)}
+        pagination={{ pageIndex: hasLocalFilters ? 0 : usersQuery.data.page - 1, pageSize: usersQuery.data.limit }}
+        onPaginationChange={(state) => {
+          if (!hasLocalFilters) {
+            setPageIndex(state.pageIndex);
+          }
+        }}
+      />
+      <Dialog open={Boolean(selectedUser)} onOpenChange={(nextOpen) => !nextOpen && setSelectedUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>User detail</DialogTitle>
+            <DialogDescription>Review the complete user record and role assignment.</DialogDescription>
+          </DialogHeader>
+          {selectedUser ? (
+            <div className="space-y-3 text-sm">
+              <p><span className="font-medium">Name:</span> {selectedUser.firstName} {selectedUser.lastName}</p>
+              <p><span className="font-medium">Email:</span> {selectedUser.email}</p>
+              <p><span className="font-medium">Organization:</span> {selectedUser.organizationName ?? "Platform"}</p>
+              <p><span className="font-medium">Status:</span> {selectedUser.isActive ? "Active" : "Inactive"}</p>
+              <p><span className="font-medium">Roles:</span> {selectedUser.roles.join(", ") || "No roles"}</p>
+              <p><span className="font-medium">Permissions:</span> {selectedUser.permissions.join(", ") || "No permissions"}</p>
+              <p><span className="font-medium">Created:</span> {formatDate(selectedUser.createdAt)}</p>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
