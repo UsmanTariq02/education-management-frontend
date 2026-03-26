@@ -5,16 +5,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-const moduleCatalog = [
-  "Users and access control",
-  "Students",
-  "Batches / classes",
-  "Fee plans and fee records",
-  "Attendance",
-  "Reminders",
-  "Reports and analytics",
-];
+import { publicModuleCatalog } from "@/lib/marketing/module-catalog";
 
 const pricingExamples = [
   {
@@ -27,16 +18,16 @@ const pricingExamples = [
   {
     title: "Growing academy",
     users: 25,
-    modules: 6,
-    monthly: 150,
-    description: "25 active users using 6 modules",
+    modules: 8,
+    monthly: 200,
+    description: "25 active users using 8 modules",
   },
   {
     title: "Operational college team",
     users: 40,
-    modules: 7,
-    monthly: 280,
-    description: "40 active users using 7 modules",
+    modules: 12,
+    monthly: 480,
+    description: "40 active users using all 12 modules",
   },
 ];
 
@@ -99,13 +90,14 @@ export default function PricingPage() {
         <Card>
           <CardHeader>
             <CardTitle>Available modules</CardTitle>
-            <CardDescription>Select the operational areas your institution wants to activate.</CardDescription>
+            <CardDescription>Select the operational areas your institution wants to activate across the full EduFlow product surface.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {moduleCatalog.map((item) => (
-              <div key={item} className="flex items-start gap-3 rounded-xl border p-4 text-sm">
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            {publicModuleCatalog.map((item) => (
+              <div key={item.key} className="rounded-xl border p-4 text-sm">
                 <Check className="mt-0.5 h-4 w-4 text-primary" />
-                <p>{item}</p>
+                <p className="mt-3 font-medium">{item.title}</p>
+                <p className="mt-1 text-muted-foreground">{item.description}</p>
               </div>
             ))}
           </CardContent>
@@ -171,6 +163,7 @@ export default function PricingPage() {
               "Do we pay only for users who actively need access? Yes.",
               "Can we start with only students, fees, attendance, and reports? Yes.",
               "Can more modules be added later without changing the platform? Yes.",
+              "Are academic workflows, portals, settings, documents, and audit logs available as separate modules? Yes.",
               "Can pricing scale across multiple organizations or campuses? Yes, the model is tenant-friendly.",
             ].map((item) => (
               <div key={item} className="flex items-start gap-3 rounded-xl border p-4 text-sm">

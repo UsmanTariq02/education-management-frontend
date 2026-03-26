@@ -10,6 +10,11 @@ export const organizationSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().default(true),
+  userLimit: z.coerce.number().int().min(1, "User limit must be at least 1").default(10),
+  studentLimit: z.coerce.number().int().min(1, "Student limit must be at least 1").default(500),
+  enabledModules: z.array(
+    z.enum(["USERS", "STUDENTS", "PORTALS", "BATCHES", "ACADEMICS", "FEES", "ATTENDANCE", "REMINDERS", "REPORTS", "ACTIVITY_LOGS", "SETTINGS", "MEDIA"]),
+  ).min(1, "Select at least one enabled module"),
 });
 
 export type OrganizationSchema = z.infer<typeof organizationSchema>;

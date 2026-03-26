@@ -24,6 +24,7 @@ import { LoadingState } from "@/components/feedback/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/form-field";
 import { formatDate } from "@/lib/formatters";
@@ -223,8 +224,7 @@ export default function AttendancePage() {
         }}
         searchPlaceholder="Search attendance by student or batch..."
         filters={
-          <select
-            className="h-10 rounded-xl border bg-background px-3 text-sm"
+          <NativeSelect
             value={statusFilter}
             onChange={(event) => {
               setStatusFilter(event.target.value);
@@ -237,7 +237,7 @@ export default function AttendancePage() {
                 {status}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         }
         exportConfig={{ filename: "attendance-records", rows: exportRows }}
         action={
@@ -253,36 +253,36 @@ export default function AttendancePage() {
                 </DialogHeader>
                 <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
                   <FormField label="Student" required error={form.formState.errors.studentId}>
-                    <select className="h-10 rounded-xl border px-3" {...form.register("studentId")}>
+                    <NativeSelect {...form.register("studentId")}>
                       <option value="">Select student</option>
                       {studentsQuery.data.items.map((student) => (
                         <option key={student.id} value={student.id}>
                           {student.fullName}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </FormField>
                   <FormField label="Batch" required error={form.formState.errors.batchId}>
-                    <select className="h-10 rounded-xl border px-3" {...form.register("batchId")}>
+                    <NativeSelect {...form.register("batchId")}>
                       <option value="">Select batch</option>
                       {batchesQuery.data.items.map((batch) => (
                         <option key={batch.id} value={batch.id}>
                           {batch.name}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </FormField>
                   <FormField label="Attendance date" required error={form.formState.errors.attendanceDate}>
                     <Input type="date" {...form.register("attendanceDate")} />
                   </FormField>
                   <FormField label="Status" required error={form.formState.errors.status}>
-                    <select className="h-10 rounded-xl border px-3" {...form.register("status")}>
+                    <NativeSelect {...form.register("status")}>
                       {["PRESENT", "ABSENT", "LATE", "LEAVE"].map((status) => (
                         <option key={status} value={status}>
                           {status}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </FormField>
                   <div className="md:col-span-2 flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>

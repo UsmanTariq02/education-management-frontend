@@ -43,12 +43,12 @@ export function MetricCard({ title, value, helper, trend, icon: Icon, tone = "de
   const selectedTone = toneClasses[tone];
 
   return (
-    <Card className={selectedTone.card}>
+    <Card className={cn("shadow-sm", selectedTone.card)}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+          <CardTitle className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{title}</CardTitle>
           {Icon ? (
-            <div className={cn("rounded-2xl p-2", selectedTone.iconWrap)}>
+            <div className={cn("rounded-2xl p-2.5", selectedTone.iconWrap)}>
               <Icon className="h-4 w-4" />
             </div>
           ) : null}
@@ -57,8 +57,8 @@ export function MetricCard({ title, value, helper, trend, icon: Icon, tone = "de
       <CardContent>
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="text-3xl font-semibold">{value}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{helper}</p>
+            <p className="text-3xl font-semibold tracking-tight">{value}</p>
+            <p className="mt-1 text-sm leading-5 text-muted-foreground">{helper}</p>
           </div>
           {trend !== undefined ? (
             <div

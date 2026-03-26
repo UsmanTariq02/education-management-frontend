@@ -10,6 +10,12 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Pie,
+  PieChart,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -27,8 +33,11 @@ import {
 } from "lucide-react";
 import { attendanceApi } from "@/features/attendance/api/attendance-api";
 import { feesApi } from "@/features/fees/api/fees-api";
+import { StudentDocumentsCard } from "@/features/media/components/student-documents-card";
+import { StudentPortalAccessCard } from "@/features/portal/components/student-portal-access-card";
 import { remindersApi } from "@/features/reminders/api/reminders-api";
 import { studentsApi } from "@/features/students/api/students-api";
+import { BoxPlotSummary } from "@/components/charts/box-plot-summary";
 import { MetricCard } from "@/components/cards/metric-card";
 import { ChartCard } from "@/components/charts/chart-card";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -41,15 +50,21 @@ import { Button } from "@/components/ui/button";
 import { getChartColor } from "@/lib/constants/chart-colors";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { usePermission } from "@/hooks/use-permission";
+import { useAuth } from "@/providers/auth-provider";
 
 const attendanceOrder = ["PRESENT", "ABSENT", "LATE", "LEAVE"] as const;
 
 export default function StudentDetailPage() {
   const params = useParams<{ id: string }>();
   const studentId = params?.id ?? "";
+  const { user } = useAuth();
   const canReadFees = usePermission("fees.read");
   const canReadAttendance = usePermission("attendance.read");
   const canReadReminders = usePermission("reminders.read");
+  const canManagePortalAccess = usePermission("portal-access.manage");
+  const canReadStudentDocuments = usePermission("student-documents.read");
+  const portalsEnabled = user?.enabledModules.includes("PORTALS") ?? false;
+  const mediaEnabled = user?.enabledModules.includes("MEDIA") ?? false;
 
   const studentQuery = useQuery({
     queryKey: ["student", studentId],
@@ -128,6 +143,32 @@ export default function StudentDetailPage() {
     }),
     [studentReminders],
   );
+  const recentAcademicResults = student.academicSummary.recentResults;
+  const latestAcademicResult = recentAcademicResults[0] ?? null;
+  const subjectRadar = latestAcademicResult
+    ? latestAcademicResult.items.map((item: (typeof latestAcademicResult.items)[number]) => ({
+        subject: item.subjectName,
+        score: Math.round((item.obtainedMarks / Math.max(item.totalMarks, 1)) * 100),
+      }))
+    : [];
+  const resultPercentages = recentAcademicResults.map((item) => item.percentage).sort((a, b) => a - b);
+  const quantile = (values: number[], q: number) => {
+    if (values.length === 0) return 0;
+    const position = (values.length - 1) * q;
+    const base = Math.floor(position);
+    const remainder = position - base;
+    const next = values[base + 1] ?? values[base];
+    return values[base] + remainder * (next - values[base]);
+  };
+  const resultSpread = resultPercentages.length
+    ? {
+        min: resultPercentages[0],
+        q1: quantile(resultPercentages, 0.25),
+        median: quantile(resultPercentages, 0.5),
+        q3: quantile(resultPercentages, 0.75),
+        max: resultPercentages[resultPercentages.length - 1],
+      }
+    : null;
 
   return (
     <div className="space-y-6">
@@ -295,6 +336,63 @@ export default function StudentDetailPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
+        <ChartCard title="Latest result subject radar" description="Subject-wise performance profile from the latest published academic result.">
+          {latestAcademicResult ? (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={subjectRadar}>
+                  <PolarGrid />
+                  <PolarAngleAxis dataKey="subject" />
+                  <Radar dataKey="score" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.3} />
+                  <Tooltip formatter={(value: number | string) => `${value}%`} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyBlock message="No academic result is available yet for a subject radar profile." />
+          )}
+        </ChartCard>
+        <ChartCard title="Latest result subject mix" description="How the latest result is distributed across subject marks.">
+          {latestAcademicResult ? (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={latestAcademicResult.items.map((item: (typeof latestAcademicResult.items)[number]) => ({ name: item.subjectName, value: item.obtainedMarks }))}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={55}
+                    outerRadius={100}
+                  >
+                    {latestAcademicResult.items.map((item: (typeof latestAcademicResult.items)[number], index: number) => (
+                      <Cell key={item.subjectName} fill={getChartColor(index)} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <EmptyBlock message="No academic result is available yet for subject distribution." />
+          )}
+        </ChartCard>
+        <ChartCard title="Result spread" description="A box-plot-style view of this student's recent result percentages.">
+          {resultSpread ? (
+            <BoxPlotSummary
+              min={resultSpread.min}
+              q1={resultSpread.q1}
+              median={resultSpread.median}
+              q3={resultSpread.q3}
+              max={resultSpread.max}
+              formatValue={(value) => `${value.toFixed(1)}%`}
+            />
+          ) : (
+            <EmptyBlock message="More than one result record is needed before a spread summary becomes useful." />
+          )}
+        </ChartCard>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Recent fee records</CardTitle>
@@ -354,6 +452,9 @@ export default function StudentDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {canManagePortalAccess && portalsEnabled ? <StudentPortalAccessCard studentId={studentId} /> : null}
+      {canReadStudentDocuments && mediaEnabled ? <StudentDocumentsCard studentId={studentId} /> : null}
 
       <Card>
         <CardHeader>

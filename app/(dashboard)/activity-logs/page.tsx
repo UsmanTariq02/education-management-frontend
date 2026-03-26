@@ -7,6 +7,7 @@ import { activityLogsApi } from "@/features/activity-logs/api/activity-logs-api"
 import { usePermission } from "@/hooks/use-permission";
 import type { ActivityLog } from "@/types/domain";
 import { DataTable } from "@/components/tables/data-table";
+import { DetailItem } from "@/components/shared/detail-item";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -257,15 +258,6 @@ export default function ActivityLogsPage() {
           ) : null}
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border bg-muted/30 p-3">
-      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-1 font-medium">{value}</p>
     </div>
   );
 }

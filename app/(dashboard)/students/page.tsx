@@ -21,7 +21,9 @@ import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/form-field";
 import { formatDate } from "@/lib/formatters";
@@ -42,7 +44,10 @@ export default function StudentsPage() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const canManage = usePermission("students.update");
   const canCreate = usePermission("students.create");
+  const canManagePortalAccess = usePermission("portal-access.manage");
+  const portalsEnabled = user?.enabledModules.includes("PORTALS") ?? false;
   const canMutateWithinScope = Boolean(user?.organizationId);
+  const isTenantUser = Boolean(user?.organizationId) && !user?.roles.includes("SUPER_ADMIN");
   const queryClient = useQueryClient();
 
   const studentsQuery = useQuery({
@@ -66,13 +71,43 @@ export default function StudentsPage() {
       admissionDate: "",
       status: "ACTIVE",
       batchIds: [],
+      createStudentPortal: false,
+      studentPortalPassword: "",
+      createParentPortal: false,
+      parentPortalPassword: "",
     },
   });
 
+  const createStudentPortal = form.watch("createStudentPortal");
+  const createParentPortal = form.watch("createParentPortal");
+
   const mutation = useMutation({
     mutationFn: async (values: StudentSchema) => {
-      if (editingStudent) return studentsApi.update(editingStudent.id, values);
-      return studentsApi.create(values);
+      const {
+        createStudentPortal,
+        studentPortalPassword,
+        createParentPortal,
+        parentPortalPassword,
+        ...studentPayload
+      } = values;
+
+      if (editingStudent) return studentsApi.update(editingStudent.id, studentPayload);
+
+      const student = await studentsApi.create(studentPayload);
+
+      if (canManagePortalAccess && portalsEnabled && (createStudentPortal || createParentPortal)) {
+        await studentsApi.upsertPortalAccess({
+          id: student.id,
+          payload: {
+            studentEnabled: createStudentPortal || undefined,
+            studentPassword: createStudentPortal ? studentPortalPassword : undefined,
+            parentEnabled: createParentPortal || undefined,
+            parentPassword: createParentPortal ? parentPortalPassword : undefined,
+          },
+        });
+      }
+
+      return student;
     },
     onSuccess: () => {
       toast.success(editingStudent ? "Student updated" : "Student created");
@@ -162,6 +197,10 @@ export default function StudentsPage() {
                       admissionDate: row.original.admissionDate.slice(0, 10),
                       status: row.original.status,
                       batchIds: row.original.batches.map((batch) => batch.id),
+                      createStudentPortal: false,
+                      studentPortalPassword: "",
+                      createParentPortal: false,
+                      parentPortalPassword: "",
                     });
                     setOpen(true);
                   }}
@@ -216,6 +255,12 @@ export default function StudentsPage() {
       batchLinks: filteredStudents.reduce((sum, item) => sum + item.batches.length, 0),
     };
   }, [filteredStudents]);
+  const studentLimitReached =
+    isTenantUser && user?.studentLimit !== null ? (studentsQuery.data?.total ?? 0) >= (user?.studentLimit ?? 0) : false;
+  const studentCapacityText =
+    isTenantUser && user?.studentLimit !== null && studentsQuery.data
+      ? `${studentsQuery.data.total}/${user?.studentLimit ?? 0} student slots used for this organization`
+      : "Students in the current page scope";
 
   if (studentsQuery.isLoading || batchesQuery.isLoading) return <LoadingState rows={6} />;
   if (studentsQuery.isError || batchesQuery.isError || !studentsQuery.data || !batchesQuery.data) {
@@ -230,12 +275,23 @@ export default function StudentsPage() {
         description="Manage admissions, guardians, batch enrollment, and operational status with search and detail views."
       />
       <OrganizationScopeBanner moduleLabel="Student operations" />
+      <div className="rounded-2xl border bg-muted/30 p-4 text-sm">
+        <p className="font-medium">Recommended use</p>
+        <p className="mt-1 text-muted-foreground">
+          Use this area for admissions, guardians, and batch enrollment. If the learner or parent needs portal access, provision it during admission or from the student detail page instead of creating a dashboard user.
+        </p>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Visible students" value={String(studentStats.totalStudents)} helper="Students in the current page scope" icon={UsersRound} tone="sky" />
+        <MetricCard title="Visible students" value={String(studentStats.totalStudents)} helper={studentCapacityText} icon={UsersRound} tone="sky" />
         <MetricCard title="Active students" value={String(studentStats.activeStudents)} helper="Currently active enrollments" icon={UserRoundCheck} tone="emerald" />
         <MetricCard title="Graduated" value={String(studentStats.graduatedStudents)} helper="Students marked as graduated" icon={GraduationCap} tone="violet" />
         <MetricCard title="Batch links" value={String(studentStats.batchLinks)} helper="Enrollment links across listed students" icon={BookOpenCheck} tone="amber" />
       </div>
+      {studentLimitReached ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
+          Student limit reached for this organization. Increase the tenant student limit from the super admin organizations module before adding or importing more students.
+        </div>
+      ) : null}
       <FilterBar
         search={search}
         onSearchChange={(value) => {
@@ -245,8 +301,7 @@ export default function StudentsPage() {
         searchPlaceholder="Search students by name, phone, or guardian..."
         filters={
           <>
-            <select
-              className="h-10 rounded-xl border bg-background px-3 text-sm"
+            <NativeSelect
               value={statusFilter}
               onChange={(event) => {
                 setStatusFilter(event.target.value);
@@ -259,9 +314,8 @@ export default function StudentsPage() {
                   {status}
                 </option>
               ))}
-            </select>
-            <select
-              className="h-10 rounded-xl border bg-background px-3 text-sm"
+            </NativeSelect>
+            <NativeSelect
               value={batchFilter}
               onChange={(event) => {
                 setBatchFilter(event.target.value);
@@ -274,7 +328,7 @@ export default function StudentsPage() {
                   {batch.name}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </>
         }
         exportConfig={{ filename: "students-management", rows: exportRows }}
@@ -282,7 +336,7 @@ export default function StudentsPage() {
           canCreate ? (
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
-                <Button disabled={!canMutateWithinScope}>Create student</Button>
+                <Button disabled={!canMutateWithinScope || studentLimitReached}>Create student</Button>
               </DialogTrigger>
               <DialogContent className="max-w-3xl">
                 <DialogHeader>
@@ -324,23 +378,47 @@ export default function StudentsPage() {
                     <p className="text-sm font-medium">Batch enrollment</p>
                     <div className="grid gap-2 rounded-xl border p-4 sm:grid-cols-2">
                       {batchesQuery.data.items.map((batch) => (
-                        <label key={batch.id} className="flex items-center gap-3 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={form.watch("batchIds").includes(batch.id)}
-                            onChange={(event) => {
-                              const current = form.getValues("batchIds");
-                              form.setValue(
-                                "batchIds",
-                                event.target.checked ? [...current, batch.id] : current.filter((item) => item !== batch.id),
-                              );
-                            }}
-                          />
-                          <span>{batch.name}</span>
-                        </label>
+                        <Checkbox
+                          key={batch.id}
+                          label={batch.name}
+                          checked={form.watch("batchIds").includes(batch.id)}
+                          onChange={(event) => {
+                            const current = form.getValues("batchIds");
+                            form.setValue(
+                              "batchIds",
+                              event.target.checked ? [...current, batch.id] : current.filter((item) => item !== batch.id),
+                            );
+                          }}
+                        />
                       ))}
                     </div>
                   </div>
+                  {!editingStudent && canManagePortalAccess && portalsEnabled ? (
+                    <div className="rounded-2xl border bg-muted/30 p-4 md:col-span-2">
+                      <p className="text-sm font-medium">Portal access</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Provision student and parent portal credentials during admission instead of doing it later from the student detail page.
+                      </p>
+                      <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        <div className="space-y-3 rounded-xl border bg-background p-4">
+                          <Checkbox label="Create student portal now" {...form.register("createStudentPortal")} />
+                          {createStudentPortal ? (
+                            <FormField label="Student portal password" required error={form.formState.errors.studentPortalPassword}>
+                              <Input type="password" {...form.register("studentPortalPassword")} />
+                            </FormField>
+                          ) : null}
+                        </div>
+                        <div className="space-y-3 rounded-xl border bg-background p-4">
+                          <Checkbox label="Create parent portal now" {...form.register("createParentPortal")} />
+                          {createParentPortal ? (
+                            <FormField label="Parent portal password" required error={form.formState.errors.parentPortalPassword}>
+                              <Input type="password" {...form.register("parentPortalPassword")} />
+                            </FormField>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="md:col-span-2 flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                       Cancel

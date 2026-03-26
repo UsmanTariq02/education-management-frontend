@@ -3,24 +3,15 @@
 import { useMemo, useState } from "react";
 import { Calculator, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-const availableModules = [
-  "Students",
-  "Batches / classes",
-  "Fees",
-  "Attendance",
-  "Reminders",
-  "Reports",
-  "Users and access",
-] as const;
+import { publicModuleOptions } from "@/lib/marketing/module-catalog";
 
 export function PricingCalculator() {
   const [userCount, setUserCount] = useState(15);
   const [selectedModules, setSelectedModules] = useState<string[]>([
-    "Students",
-    "Fees",
+    "Student records",
+    "Fee plans and collections",
     "Attendance",
-    "Reports",
+    "Reports and analytics",
   ]);
 
   const monthlyEstimate = useMemo(() => userCount * selectedModules.length, [selectedModules.length, userCount]);
@@ -53,7 +44,7 @@ export function PricingCalculator() {
           <div className="space-y-3">
             <p className="text-sm font-medium">Selected modules</p>
             <div className="grid gap-2 sm:grid-cols-2">
-              {availableModules.map((module) => {
+              {publicModuleOptions.map((module) => {
                 const isSelected = selectedModules.includes(module);
 
                 return (

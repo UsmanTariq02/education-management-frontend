@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSessionState] = useState<SessionState | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const stored = readSession();
@@ -31,8 +33,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setSession = (nextSession: SessionState | null) => {
+    const shouldResetQueries =
+      session?.user.id !== nextSession?.user.id ||
+      session?.user.organizationId !== nextSession?.user.organizationId;
+
     setSessionState(nextSession);
     writeSession(nextSession);
+
+    if (shouldResetQueries) {
+      void queryClient.clear();
+    }
   };
 
   const refreshCurrentUser = async () => {

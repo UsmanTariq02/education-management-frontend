@@ -13,6 +13,7 @@ import { ChartCard } from "@/components/charts/chart-card";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { FormField } from "@/components/forms/form-field";
+import { DetailItem } from "@/components/shared/detail-item";
 import { OrganizationScopeBanner } from "@/components/shared/organization-scope-banner";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
@@ -20,8 +21,10 @@ import { MetricCard } from "@/components/cards/metric-card";
 import { DataTable } from "@/components/tables/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { feesApi } from "@/features/fees/api/fees-api";
@@ -515,43 +518,43 @@ export default function RemindersPage() {
                   </DialogHeader>
                   <form className="grid gap-4 md:grid-cols-2" onSubmit={manualForm.handleSubmit((values) => logMutation.mutate(values))}>
                     <FormField label="Student" required error={manualForm.formState.errors.studentId}>
-                      <select className="h-10 rounded-xl border px-3" {...manualForm.register("studentId")}>
+                      <NativeSelect {...manualForm.register("studentId")}>
                         <option value="">Select student</option>
                         {(studentsQuery.data?.items ?? []).map((student) => (
                           <option key={student.id} value={student.id}>
                             {student.fullName}
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                     </FormField>
                     <FormField label="Fee record" error={manualForm.formState.errors.feeRecordId}>
-                      <select className="h-10 rounded-xl border px-3" {...manualForm.register("feeRecordId")}>
+                      <NativeSelect {...manualForm.register("feeRecordId")}>
                         <option value="">Optional fee record</option>
                         {(feesQuery.data?.items ?? []).map((record) => (
                           <option key={record.id} value={record.id}>
                             {(studentMap.get(record.studentId)?.fullName ?? "Student")} / {record.month}/{record.year} / {record.status}
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                     </FormField>
                     <FormField label="Channel" required error={manualForm.formState.errors.channel}>
-                      <select className="h-10 rounded-xl border px-3" {...manualForm.register("channel")}>
+                      <NativeSelect {...manualForm.register("channel")}>
                         {["SMS", "WHATSAPP", "EMAIL", "MANUAL"].map((channel) => (
                           <option key={channel} value={channel}>
                             {channel}
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                     </FormField>
                     {editingReminder ? (
                       <FormField label="Status" required error={manualForm.formState.errors.status}>
-                        <select className="h-10 rounded-xl border px-3" {...manualForm.register("status")}>
+                        <NativeSelect {...manualForm.register("status")}>
                           {["PENDING", "SENT", "FAILED"].map((status) => (
                             <option key={status} value={status}>
                               {status}
                             </option>
                           ))}
-                        </select>
+                        </NativeSelect>
                       </FormField>
                     ) : (
                       <div className="space-y-2">
@@ -722,22 +725,22 @@ export default function RemindersPage() {
                         <Input {...templateForm.register("code")} placeholder="fee_overdue_guardian_whatsapp" />
                       </FormField>
                       <FormField label="Channel" required error={templateForm.formState.errors.channel}>
-                        <select className="h-10 rounded-xl border px-3" {...templateForm.register("channel")}>
+                        <NativeSelect {...templateForm.register("channel")}>
                           {["EMAIL", "WHATSAPP", "SMS", "MANUAL"].map((channel) => (
                             <option key={channel} value={channel}>
                               {channel}
                             </option>
                           ))}
-                        </select>
+                        </NativeSelect>
                       </FormField>
                       <FormField label="Recipient target" required error={templateForm.formState.errors.target}>
-                        <select className="h-10 rounded-xl border px-3" {...templateForm.register("target")}>
+                        <NativeSelect {...templateForm.register("target")}>
                           {["GUARDIAN", "STUDENT", "BOTH"].map((target) => (
                             <option key={target} value={target}>
                               {target}
                             </option>
                           ))}
-                        </select>
+                        </NativeSelect>
                       </FormField>
                       <FormField label="Subject" className="md:col-span-2" error={templateForm.formState.errors.subject}>
                         <Input {...templateForm.register("subject")} placeholder="Optional for email templates" />
@@ -745,10 +748,7 @@ export default function RemindersPage() {
                       <FormField label="Body" className="md:col-span-2" required error={templateForm.formState.errors.body}>
                         <Textarea rows={7} {...templateForm.register("body")} />
                       </FormField>
-                      <label className="flex items-center gap-3 text-sm md:col-span-2">
-                        <input type="checkbox" {...templateForm.register("isActive")} />
-                        <span>Template is active</span>
-                      </label>
+                      <Checkbox containerClassName="md:col-span-2" label="Template is active" {...templateForm.register("isActive")} />
                       <div className="rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground md:col-span-2">
                         Available placeholders: {templatePlaceholderRows.join(", ")}
                       </div>
@@ -847,31 +847,28 @@ export default function RemindersPage() {
                       <Input {...ruleForm.register("name")} />
                     </FormField>
                     <FormField label="Trigger" required error={ruleForm.formState.errors.trigger}>
-                      <select className="h-10 rounded-xl border px-3" {...ruleForm.register("trigger")}>
+                      <NativeSelect {...ruleForm.register("trigger")}>
                         {automationTriggerOptions.map((option) => (
                           <option key={option.value} value={option.value}>
                             {option.label}
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                     </FormField>
                     <FormField label="Template" required error={ruleForm.formState.errors.templateId} className="md:col-span-2">
-                      <select className="h-10 rounded-xl border px-3" {...ruleForm.register("templateId")}>
+                      <NativeSelect {...ruleForm.register("templateId")}>
                         <option value="">Select template</option>
                         {templates.map((template) => (
                           <option key={template.id} value={template.id}>
                             {template.name} · {template.channel} · {template.target}
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                     </FormField>
                     <FormField label="Offset days" required error={ruleForm.formState.errors.offsetDays}>
                       <Input type="number" min={0} {...ruleForm.register("offsetDays", { valueAsNumber: true })} />
                     </FormField>
-                    <label className="flex items-center gap-3 text-sm">
-                      <input type="checkbox" {...ruleForm.register("isActive")} />
-                      <span>Rule is active</span>
-                    </label>
+                    <Checkbox label="Rule is active" {...ruleForm.register("isActive")} />
                     <div className="rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground md:col-span-2">
                       {automationTriggerOptions.map((option) => (
                         <p key={option.value}>
@@ -960,8 +957,7 @@ export default function RemindersPage() {
         searchPlaceholder="Search reminders by student, message, or delivery..."
         filters={
           <>
-            <select
-              className="h-10 rounded-xl border bg-background px-3 text-sm"
+            <NativeSelect
               value={statusFilter}
               onChange={(event) => {
                 setStatusFilter(event.target.value);
@@ -974,9 +970,8 @@ export default function RemindersPage() {
                   {status}
                 </option>
               ))}
-            </select>
-            <select
-              className="h-10 rounded-xl border bg-background px-3 text-sm"
+            </NativeSelect>
+            <NativeSelect
               value={channelFilter}
               onChange={(event) => {
                 setChannelFilter(event.target.value);
@@ -989,7 +984,7 @@ export default function RemindersPage() {
                   {channel}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </>
         }
         exportConfig={{ filename: "reminder-logs", rows: exportRows }}
@@ -1016,11 +1011,11 @@ export default function RemindersPage() {
           {selectedReminder ? (
             <div className="space-y-4 text-sm">
               <div className="grid gap-3 md:grid-cols-2">
-                <ReminderDetailItem label="Student" value={studentMap.get(selectedReminder.studentId)?.fullName ?? "Unknown student"} />
-                <ReminderDetailItem label="Channel" value={selectedReminder.channel} />
-                <ReminderDetailItem label="Status" value={selectedReminder.status} />
-                <ReminderDetailItem label="Sent at" value={formatDate(selectedReminder.sentAt)} />
-                <ReminderDetailItem
+                <DetailItem label="Student" value={studentMap.get(selectedReminder.studentId)?.fullName ?? "Unknown student"} />
+                <DetailItem label="Channel" value={selectedReminder.channel} />
+                <DetailItem label="Status" value={selectedReminder.status} />
+                <DetailItem label="Sent at" value={formatDate(selectedReminder.sentAt)} />
+                <DetailItem
                   label="Fee record"
                   value={
                     selectedReminder.feeRecordId && feeRecordMap.get(selectedReminder.feeRecordId)
@@ -1028,7 +1023,7 @@ export default function RemindersPage() {
                       : "General"
                   }
                 />
-                <ReminderDetailItem label="Delivery reference" value={selectedReminder.deliveryReference ?? "Not available"} />
+                <DetailItem label="Delivery reference" value={selectedReminder.deliveryReference ?? "Not available"} />
               </div>
               <div className="rounded-xl border bg-muted/30 p-4">
                 <p className="mb-2 font-medium">Complete message</p>
@@ -1044,15 +1039,6 @@ export default function RemindersPage() {
           ) : null}
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function ReminderDetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border bg-muted/30 p-3">
-      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-1 font-medium">{value}</p>
     </div>
   );
 }
@@ -1096,7 +1082,7 @@ function ToggleSetting({
         <p className="font-medium">{label}</p>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>
-      <input type="checkbox" {...inputProps} />
+      <Checkbox {...inputProps} />
     </label>
   );
 }

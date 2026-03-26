@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LandingLoader } from "@/components/feedback/landing-loader";
+import { publicModuleCatalog } from "@/lib/marketing/module-catalog";
 
 const features = [
   {
@@ -42,6 +43,7 @@ const features = [
 const trustPoints = [
   "Multi-tenant architecture for multiple schools or colleges",
   "Role and permission security for super admin, admin, and staff",
+  "Twelve public-facing modules covering governance, academics, finance, communication, and documents",
   "Chart-ready analytics for fees, attendance, reminders, and student activity",
   "CSV student import for faster implementation and migration",
 ];
@@ -191,6 +193,26 @@ export default function LandingPage() {
               </Card>
             );
           })}
+        </div>
+      </section>
+
+      <section className="container py-16">
+        <div className="mb-8 max-w-3xl space-y-3">
+          <p className="text-sm font-medium uppercase tracking-[0.24em] text-primary">Full module catalog</p>
+          <h2 className="text-3xl font-semibold tracking-tight">All modules available for public SaaS positioning</h2>
+          <p className="text-muted-foreground">
+            Buyers should be able to see the full product scope immediately, from governance and admissions to academics, finance, portals, reporting, and auditability.
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {publicModuleCatalog.map((module) => (
+            <Card key={module.key}>
+              <CardHeader>
+                <CardTitle className="text-xl">{module.title}</CardTitle>
+                <CardDescription>{module.description}</CardDescription>
+              </CardHeader>
+            </Card>
+          ))}
         </div>
       </section>
 

@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { publicModuleCatalog } from "@/lib/marketing/module-catalog";
 
 export default function AboutPage() {
   return (
@@ -120,22 +121,18 @@ export default function AboutPage() {
         <Card>
           <CardHeader>
             <CardTitle>What the product covers</CardTitle>
-            <CardDescription>Core modules are connected as one operational system.</CardDescription>
+            <CardDescription>All public-facing modules are listed here so buyers can see the full SaaS scope clearly.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {[
-              "Students and batch enrollment",
-              "Fee plans, fee records, collections, and overdue tracking",
-              "Attendance workflows and daily operational review",
-              "Manual reminders, templates, automation rules, and delivery logs",
-              "Role-permission management and audit visibility",
-              "Reports and chart-ready analytics for management teams",
-            ].map((item, index) => (
-              <div key={item} className="flex items-start gap-4 rounded-xl border p-4">
+            {publicModuleCatalog.map((item, index) => (
+              <div key={item.key} className="flex items-start gap-4 rounded-xl border p-4">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                   {index + 1}
                 </div>
-                <p className="text-sm">{item}</p>
+                <div>
+                  <p className="text-sm font-medium">{item.title}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
+                </div>
               </div>
             ))}
           </CardContent>

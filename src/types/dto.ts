@@ -1,13 +1,22 @@
 import type {
   ContactInquiryStatus,
+  OrganizationModule,
   AttendanceStatus,
   FeeRecordStatus,
+  OrganizationAssetType,
+  PortalAccountType,
   PaymentMethod,
   ReminderAutomationTrigger,
   ReminderChannel,
   ReminderRecipientTarget,
   ReminderStatus,
   StudentStatus,
+  StudentDocumentType,
+  StudentExamResultStatus,
+  TimetableDayOfWeek,
+  ClassDeliveryMode,
+  OnlineClassProvider,
+  OnlineClassSessionStatus,
 } from "@/types/domain";
 
 export interface LoginDto {
@@ -15,9 +24,17 @@ export interface LoginDto {
   password: string;
 }
 
+export interface PortalLoginDto {
+  email: string;
+  password: string;
+  accountType: PortalAccountType;
+}
+
 export interface RefreshTokenDto {
   refreshToken: string;
 }
+
+export interface PortalRefreshTokenDto extends RefreshTokenDto {}
 
 export interface LogoutDto {
   reason?: string;
@@ -42,6 +59,9 @@ export interface CreateOrganizationDto {
   phone?: string;
   address?: string;
   isActive?: boolean;
+  userLimit?: number;
+  studentLimit?: number;
+  enabledModules?: OrganizationModule[];
 }
 
 export interface UpdateOrganizationDto extends Partial<CreateOrganizationDto> {}
@@ -87,6 +107,25 @@ export interface CreateStudentDto {
 
 export interface UpdateStudentDto extends Partial<CreateStudentDto> {}
 
+export interface UpsertPortalAccessDto {
+  studentEnabled?: boolean;
+  studentPassword?: string;
+  parentEnabled?: boolean;
+  parentPassword?: string;
+}
+
+export interface CreateStudentDocumentDto {
+  title: string;
+  type: StudentDocumentType;
+  notes?: string;
+}
+
+export interface CreateOrganizationAssetDto {
+  title: string;
+  type: OrganizationAssetType;
+  notes?: string;
+}
+
 export interface CreateBatchDto {
   name: string;
   code: string;
@@ -98,6 +137,151 @@ export interface CreateBatchDto {
 }
 
 export interface UpdateBatchDto extends Partial<CreateBatchDto> {}
+
+export interface CreateAcademicSessionDto {
+  name: string;
+  code: string;
+  description?: string;
+  startDate: string;
+  endDate: string;
+  isCurrent?: boolean;
+  isActive?: boolean;
+}
+
+export interface UpdateAcademicSessionDto extends Partial<CreateAcademicSessionDto> {}
+
+export interface CreateSubjectDto {
+  name: string;
+  code: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateSubjectDto extends Partial<CreateSubjectDto> {}
+
+export interface CreateTeacherDto {
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phone: string;
+  qualification?: string;
+  specialization?: string;
+  joinedAt: string;
+  isActive?: boolean;
+  createLoginAccess?: boolean;
+  accessPassword?: string;
+  accessIsActive?: boolean;
+}
+
+export interface UpdateTeacherDto extends Partial<CreateTeacherDto> {}
+
+export interface CreateBatchSubjectAssignmentDto {
+  academicSessionId?: string;
+  batchId: string;
+  subjectId: string;
+  teacherId?: string;
+  weeklyClasses?: number;
+  isPrimary?: boolean;
+  isActive?: boolean;
+}
+
+export interface UpdateBatchSubjectAssignmentDto extends Partial<CreateBatchSubjectAssignmentDto> {}
+
+export interface CreateTimetableEntryDto {
+  academicSessionId?: string;
+  batchId: string;
+  subjectId: string;
+  teacherId?: string;
+  dayOfWeek: TimetableDayOfWeek;
+  startTime: string;
+  endTime: string;
+  deliveryMode?: ClassDeliveryMode;
+  onlineClassProvider?: OnlineClassProvider;
+  onlineMeetingUrl?: string;
+  onlineMeetingCode?: string;
+  externalCalendarEventId?: string;
+  autoAttendanceEnabled?: boolean;
+  attendanceJoinThresholdMinutes?: number;
+  room?: string;
+  notes?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateTimetableEntryDto extends Partial<CreateTimetableEntryDto> {}
+
+export interface CreateOnlineClassSessionDto {
+  timetableEntryId: string;
+  scheduledStartAt: string;
+  scheduledEndAt: string;
+}
+
+export interface UpdateOnlineClassSessionDto {
+  status?: OnlineClassSessionStatus;
+  actualStartAt?: string;
+  actualEndAt?: string;
+  meetingUrl?: string;
+  meetingCode?: string;
+  externalCalendarEventId?: string;
+  externalSpaceId?: string;
+  externalConferenceRecordId?: string;
+}
+
+export interface UpsertOnlineClassProviderSettingDto {
+  provider?: OnlineClassProvider;
+  integrationEnabled?: boolean;
+  autoCreateMeetLinks?: boolean;
+  autoSyncParticipants?: boolean;
+  calendarId?: string;
+  impersonatedUserEmail?: string;
+}
+
+export interface OnlineClassParticipantInputDto {
+  studentId?: string;
+  participantEmail?: string;
+  participantName?: string;
+  externalParticipantId?: string;
+  joinedAt: string;
+  leftAt?: string;
+  totalMinutes: number;
+}
+
+export interface CreateExamSubjectDto {
+  subjectId: string;
+  totalMarks: number;
+  passMarks: number;
+}
+
+export interface CreateExamDto {
+  academicSessionId?: string;
+  batchId: string;
+  teacherId?: string;
+  name: string;
+  code: string;
+  description?: string;
+  examDate: string;
+  isPublished?: boolean;
+  subjects: CreateExamSubjectDto[];
+}
+
+export interface UpdateExamDto extends Partial<CreateExamDto> {}
+
+export interface CreateExamResultItemDto {
+  examSubjectId: string;
+  subjectId: string;
+  obtainedMarks: number;
+  remarks?: string;
+}
+
+export interface CreateExamResultDto {
+  examId: string;
+  studentId: string;
+  remarks?: string;
+  status?: StudentExamResultStatus;
+  items: CreateExamResultItemDto[];
+}
+
+export interface UpdateExamResultDto extends Partial<CreateExamResultDto> {}
 
 export interface CreateFeePlanDto {
   studentId: string;

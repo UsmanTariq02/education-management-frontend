@@ -9,15 +9,15 @@ import { toast } from "sonner";
 import { inquiriesApi } from "@/features/inquiries/api/inquiries-api";
 import { contactInquirySchema, type ContactInquirySchema } from "@/features/inquiries/schemas/contact-inquiry-schema";
 import { normalizeApiError } from "@/lib/api/errors";
+import { publicModuleOptions } from "@/lib/marketing/module-catalog";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/forms/form-field";
-
-const moduleOptions = ["Students", "Batches / classes", "Fees", "Attendance", "Reminders", "Reports"] as const;
 
 export default function ContactPage() {
   const form = useForm<ContactInquirySchema>({
@@ -29,7 +29,7 @@ export default function ContactPage() {
       phone: "",
       institutionType: "School",
       expectedUserCount: "1-10",
-      requestedModules: ["Students", "Fees", "Attendance"],
+      requestedModules: ["Student records", "Fee plans and collections", "Attendance"],
       inquiryType: "Product demo",
       message: "",
     },
@@ -46,7 +46,7 @@ export default function ContactPage() {
         phone: "",
         institutionType: "School",
         expectedUserCount: "1-10",
-        requestedModules: ["Students", "Fees", "Attendance"],
+        requestedModules: ["Student records", "Fee plans and collections", "Attendance"],
         inquiryType: "Product demo",
         message: "",
       });
@@ -135,26 +135,26 @@ export default function ContactPage() {
                 <Input {...form.register("phone")} placeholder="+92..." />
               </FormField>
               <FormField label="Institution type" required error={form.formState.errors.institutionType}>
-                <select className="h-10 rounded-xl border px-3 text-sm" {...form.register("institutionType")}>
+                <NativeSelect {...form.register("institutionType")}>
                   <option>School</option>
                   <option>College</option>
                   <option>Academy</option>
                   <option>Training institute</option>
                   <option>Education group</option>
-                </select>
+                </NativeSelect>
               </FormField>
               <FormField label="Expected operational users" required error={form.formState.errors.expectedUserCount}>
-                <select className="h-10 rounded-xl border px-3 text-sm" {...form.register("expectedUserCount")}>
+                <NativeSelect {...form.register("expectedUserCount")}>
                   <option>1-10</option>
                   <option>11-25</option>
                   <option>26-50</option>
                   <option>50+</option>
-                </select>
+                </NativeSelect>
               </FormField>
               <div className="space-y-2 md:col-span-2">
                 <p className="text-sm font-medium">Required modules</p>
                 <div className="grid gap-2 rounded-xl border p-4 sm:grid-cols-2">
-                  {moduleOptions.map((module) => (
+                  {publicModuleOptions.map((module) => (
                     <label key={module} className="flex items-center gap-3 text-sm">
                       <input
                         type="checkbox"
@@ -177,13 +177,13 @@ export default function ContactPage() {
                 ) : null}
               </div>
               <FormField label="What do you need help with?" required error={form.formState.errors.inquiryType} className="md:col-span-2">
-                <select className="h-10 rounded-xl border px-3 text-sm" {...form.register("inquiryType")}>
+                <NativeSelect {...form.register("inquiryType")}>
                   <option>Product demo</option>
                   <option>Pricing estimate</option>
                   <option>Implementation planning</option>
                   <option>Multi-tenant rollout</option>
                   <option>Migration from current system</option>
-                </select>
+                </NativeSelect>
               </FormField>
               <FormField label="Message" required error={form.formState.errors.message} className="md:col-span-2">
                 <Textarea

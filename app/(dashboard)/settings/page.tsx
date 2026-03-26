@@ -13,11 +13,18 @@ import { LoadingState } from "@/components/feedback/loading-state";
 import { FormField } from "@/components/forms/form-field";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { organizationsApi } from "@/features/organizations/api/organizations-api";
 import { organizationSchema, type OrganizationSchema } from "@/features/organizations/schemas/organization-schema";
+import { OrganizationAssetsCard } from "@/features/media/components/organization-assets-card";
+import { onlineClassesApi } from "@/features/online-classes/api/online-classes-api";
+import {
+  onlineClassProviderSettingSchema,
+  type OnlineClassProviderSettingSchema,
+} from "@/features/online-classes/schemas/online-class-provider-setting-schema";
 import { remindersApi } from "@/features/reminders/api/reminders-api";
 import {
   reminderProviderSettingSchema,
@@ -32,6 +39,8 @@ export default function SettingsPage() {
   const organizationId = user?.organizationId;
   const isSuperAdmin = user?.roles.includes("SUPER_ADMIN") ?? false;
   const isOrganizationAdmin = user?.roles.includes("ADMIN") ?? false;
+  const mediaEnabled = user?.enabledModules.includes("MEDIA") ?? false;
+  const academicsEnabled = user?.enabledModules.includes("ACADEMICS") ?? false;
 
   const organizationQuery = useQuery({
     queryKey: ["organizations", "settings", organizationId],
@@ -43,6 +52,11 @@ export default function SettingsPage() {
     queryKey: ["reminder-provider-settings", "settings-page"],
     queryFn: remindersApi.getProviderSettings,
     enabled: Boolean(organizationId) && isOrganizationAdmin && !isSuperAdmin,
+  });
+  const onlineClassProviderSettingsQuery = useQuery({
+    queryKey: ["online-class-provider-settings", "settings-page"],
+    queryFn: onlineClassesApi.getProviderSettings,
+    enabled: Boolean(organizationId) && isOrganizationAdmin && !isSuperAdmin && academicsEnabled,
   });
 
   const organizationForm = useForm<OrganizationSchema>({
@@ -67,6 +81,17 @@ export default function SettingsPage() {
       paymentConfirmationEnabled: false,
       senderName: "",
       replyToEmail: "",
+    },
+  });
+  const onlineClassProviderForm = useForm<OnlineClassProviderSettingSchema>({
+    resolver: zodResolver(onlineClassProviderSettingSchema),
+    defaultValues: {
+      provider: "GOOGLE_MEET",
+      integrationEnabled: false,
+      autoCreateMeetLinks: false,
+      autoSyncParticipants: false,
+      calendarId: "",
+      impersonatedUserEmail: "",
     },
   });
 
@@ -100,6 +125,20 @@ export default function SettingsPage() {
       replyToEmail: providerSettingsQuery.data.replyToEmail ?? "",
     });
   }, [providerSettingsQuery.data, reminderForm]);
+  useEffect(() => {
+    if (!onlineClassProviderSettingsQuery.data) {
+      return;
+    }
+
+    onlineClassProviderForm.reset({
+      provider: onlineClassProviderSettingsQuery.data.provider,
+      integrationEnabled: onlineClassProviderSettingsQuery.data.integrationEnabled,
+      autoCreateMeetLinks: onlineClassProviderSettingsQuery.data.autoCreateMeetLinks,
+      autoSyncParticipants: onlineClassProviderSettingsQuery.data.autoSyncParticipants,
+      calendarId: onlineClassProviderSettingsQuery.data.calendarId ?? "",
+      impersonatedUserEmail: onlineClassProviderSettingsQuery.data.impersonatedUserEmail ?? "",
+    });
+  }, [onlineClassProviderForm, onlineClassProviderSettingsQuery.data]);
 
   const organizationMutation = useMutation({
     mutationFn: async (values: OrganizationSchema) => {
@@ -133,6 +172,20 @@ export default function SettingsPage() {
       toast.success("Reminder provider settings updated");
       queryClient.invalidateQueries({ queryKey: ["reminder-provider-settings"] });
       queryClient.invalidateQueries({ queryKey: ["reminder-provider-settings", "settings-page"] });
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+  const onlineClassProviderMutation = useMutation({
+    mutationFn: (values: OnlineClassProviderSettingSchema) =>
+      onlineClassesApi.upsertProviderSettings({
+        ...values,
+        calendarId: values.calendarId || undefined,
+        impersonatedUserEmail: values.impersonatedUserEmail || undefined,
+      }),
+    onSuccess: () => {
+      toast.success("Online class provider settings updated");
+      queryClient.invalidateQueries({ queryKey: ["online-class-provider-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["online-class-provider-settings", "settings-page"] });
     },
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
@@ -206,11 +259,22 @@ export default function SettingsPage() {
     );
   }
 
-  if (organizationQuery.isLoading || providerSettingsQuery.isLoading) {
+  if (
+    organizationQuery.isLoading ||
+    providerSettingsQuery.isLoading ||
+    (academicsEnabled && onlineClassProviderSettingsQuery.isLoading)
+  ) {
     return <LoadingState rows={6} />;
   }
 
-  if (organizationQuery.isError || providerSettingsQuery.isError || !organizationQuery.data || !providerSettingsQuery.data) {
+  if (
+    organizationQuery.isError ||
+    providerSettingsQuery.isError ||
+    (academicsEnabled && onlineClassProviderSettingsQuery.isError) ||
+    !organizationQuery.data ||
+    !providerSettingsQuery.data ||
+    (academicsEnabled && !onlineClassProviderSettingsQuery.data)
+  ) {
     return <ErrorState description="Settings could not be loaded from the current organization context." />;
   }
 
@@ -345,6 +409,79 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {academicsEnabled ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Online class provider</CardTitle>
+              <CardDescription>Configure Google Meet generation and participant sync for scheduled online classes.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form
+                className="grid gap-4 md:grid-cols-2"
+                onSubmit={onlineClassProviderForm.handleSubmit((values) => onlineClassProviderMutation.mutate(values))}
+              >
+                <FormField label="Provider" className="md:col-span-2">
+                  <select
+                    className="h-10 rounded-xl border bg-background px-3 text-sm"
+                    {...onlineClassProviderForm.register("provider")}
+                  >
+                    <option value="GOOGLE_MEET">Google Meet</option>
+                    <option value="ZOOM">Zoom</option>
+                  </select>
+                </FormField>
+                <ToggleField
+                  label="Integration enabled"
+                  description="Allow scheduled online classes to use the selected provider."
+                  checked={onlineClassProviderForm.watch("integrationEnabled")}
+                  onChange={(checked) =>
+                    onlineClassProviderForm.setValue("integrationEnabled", checked, { shouldDirty: true })
+                  }
+                />
+                <ToggleField
+                  label="Auto-create meet links"
+                  description="Generate a Meet link as soon as an online class session is created."
+                  checked={onlineClassProviderForm.watch("autoCreateMeetLinks")}
+                  onChange={(checked) =>
+                    onlineClassProviderForm.setValue("autoCreateMeetLinks", checked, { shouldDirty: true })
+                  }
+                />
+                <ToggleField
+                  label="Auto-sync participants"
+                  description="Reserved for scheduled background sync once the server job is enabled."
+                  checked={onlineClassProviderForm.watch("autoSyncParticipants")}
+                  onChange={(checked) =>
+                    onlineClassProviderForm.setValue("autoSyncParticipants", checked, { shouldDirty: true })
+                  }
+                />
+                <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">Google Workspace requirement</p>
+                  <p className="mt-1">
+                    Calendar creation and participant sync require delegated Workspace credentials on the backend.
+                  </p>
+                </div>
+                <FormField label="Calendar ID" error={onlineClassProviderForm.formState.errors.calendarId}>
+                  <Input {...onlineClassProviderForm.register("calendarId")} placeholder="primary" />
+                </FormField>
+                <FormField
+                  label="Delegated admin email"
+                  error={onlineClassProviderForm.formState.errors.impersonatedUserEmail}
+                >
+                  <Input
+                    type="email"
+                    {...onlineClassProviderForm.register("impersonatedUserEmail")}
+                    placeholder="workspace-admin@school.edu"
+                  />
+                </FormField>
+                <div className="md:col-span-2 flex justify-end">
+                  <Button type="submit" disabled={onlineClassProviderMutation.isPending}>
+                    {onlineClassProviderMutation.isPending ? "Saving..." : "Save online class settings"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Operational notes</CardTitle>
@@ -357,7 +494,9 @@ export default function SettingsPage() {
             </div>
             <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
               <p className="font-medium text-foreground">Live today</p>
-              <p className="mt-2">Organization profile details and reminder provider controls are stored against the current tenant and affect real platform behavior.</p>
+              <p className="mt-2">
+                Organization profile details, reminder provider controls, and online class provider settings are stored against the current tenant and affect real platform behavior.
+              </p>
             </div>
             <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
               <p className="font-medium text-foreground">Next backend step</p>
@@ -366,6 +505,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+      {mediaEnabled ? <OrganizationAssetsCard /> : null}
     </div>
   );
 }
@@ -389,7 +529,7 @@ function ToggleField({
         <p className="font-medium">{label}</p>
         <p className="mt-1 text-muted-foreground">{description}</p>
       </div>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-1" />
+      <Checkbox checked={checked} onChange={(event) => onChange(event.target.checked)} />
     </label>
   );
 }

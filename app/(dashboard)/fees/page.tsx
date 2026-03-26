@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Banknote, Coins, Receipt } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useForm } from "react-hook-form";
 import { CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Bar, BarChart } from "recharts";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { feesApi } from "@/features/fees/api/fees-api";
 import { studentsApi } from "@/features/students/api/students-api";
@@ -23,6 +24,7 @@ import { LoadingState } from "@/components/feedback/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/form-field";
 import { formatCurrency, formatDate } from "@/lib/formatters";
@@ -35,9 +37,12 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 export default function FeesPage() {
   const { user } = useAuth();
-  const [search, setSearch] = useState("");
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams?.get("search") ?? "";
+  const initialStatusFilter = searchParams?.get("status") ?? "ALL";
+  const [search, setSearch] = useState(initialSearch);
   const debouncedSearch = useDebouncedValue(search);
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 12;
   const [recordOpen, setRecordOpen] = useState(false);
@@ -65,6 +70,12 @@ export default function FeesPage() {
   });
   const studentMap = useMemo(() => new Map((studentsQuery.data?.items ?? []).map((student) => [student.id, student])), [studentsQuery.data]);
   const planMap = useMemo(() => new Map((plansQuery.data?.items ?? []).map((plan) => [plan.id, plan])), [plansQuery.data]);
+
+  useEffect(() => {
+    setSearch(searchParams?.get("search") ?? "");
+    setStatusFilter(searchParams?.get("status") ?? "ALL");
+    setPageIndex(0);
+  }, [searchParams]);
 
   const form = useForm<FeeRecordSchema>({
     resolver: zodResolver(feeRecordSchema),
@@ -314,8 +325,7 @@ export default function FeesPage() {
         }}
         searchPlaceholder="Search fee records by student or billing cycle..."
         filters={
-          <select
-            className="h-10 rounded-xl border bg-background px-3 text-sm"
+          <NativeSelect
             value={statusFilter}
             onChange={(event) => {
               setStatusFilter(event.target.value);
@@ -328,7 +338,7 @@ export default function FeesPage() {
                 {status}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         }
         exportConfig={{ filename: "fee-records", rows: exportRows }}
         action={
@@ -344,24 +354,24 @@ export default function FeesPage() {
                 </DialogHeader>
                 <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
                   <FormField label="Student" required error={form.formState.errors.studentId}>
-                    <select className="h-10 rounded-xl border px-3" {...form.register("studentId")}>
+                    <NativeSelect {...form.register("studentId")}>
                       <option value="">Select student</option>
                       {(studentsQuery.data?.items ?? []).map((student) => (
                         <option key={student.id} value={student.id}>
                           {student.fullName}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </FormField>
                   <FormField label="Fee plan" required error={form.formState.errors.feePlanId}>
-                    <select className="h-10 rounded-xl border px-3" {...form.register("feePlanId")}>
+                    <NativeSelect {...form.register("feePlanId")}>
                       <option value="">Select fee plan</option>
                       {(plansQuery.data?.items ?? []).map((plan) => (
                         <option key={plan.id} value={plan.id}>
                           {(studentMap.get(plan.studentId)?.fullName ?? "Student")} / due day {plan.dueDay} / {formatCurrency(plan.monthlyFee)} / {plan.isActive ? "Active" : "Inactive"}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </FormField>
                   <FormField label="Month" required error={form.formState.errors.month}>
                     <Input type="number" {...form.register("month", { valueAsNumber: true })} />

@@ -43,30 +43,41 @@ export default function UsersPage() {
   const [open, setOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [rolePresetName, setRolePresetName] = useState<string | null>(null);
   const canManage = usePermission("users.update");
   const canCreate = usePermission("users.create");
   const queryClient = useQueryClient();
+  const isTenantAdmin = Boolean(user?.organizationId) && !user?.roles.includes("SUPER_ADMIN");
   const assignableRoleNames = useMemo(() => {
     if (user?.roles.includes("SUPER_ADMIN")) {
-      return new Set(["SUPER_ADMIN", "ADMIN", "STAFF"]);
+      return new Set(["SUPER_ADMIN", "ADMIN", "ACADEMIC_COORDINATOR", "TEACHER", "STAFF"]);
     }
 
     if (user?.roles.includes("ADMIN")) {
-      return new Set(["ADMIN", "STAFF"]);
+      return new Set(["ADMIN", "ACADEMIC_COORDINATOR", "TEACHER", "STAFF"]);
+    }
+
+    if (user?.roles.includes("ACADEMIC_COORDINATOR")) {
+      return new Set(["TEACHER", "STAFF"]);
     }
 
     return new Set(["STAFF"]);
   }, [user?.roles]);
 
   const usersQuery = useQuery({
-    queryKey: ["users", debouncedSearch, pageIndex, pageSize],
+    queryKey: ["users", user?.id ?? "guest", user?.organizationId ?? "platform", debouncedSearch, pageIndex, pageSize],
     queryFn: () => usersApi.list({ page: pageIndex + 1, limit: pageSize, search: debouncedSearch }),
   });
-  const rolesQuery = useQuery({ queryKey: ["roles", "users-page"], queryFn: rolesApi.list });
+  const shouldLoadReferenceData = open || Boolean(selectedUser) || Boolean(editingUser);
+  const rolesQuery = useQuery({
+    queryKey: ["roles", "users-page"],
+    queryFn: rolesApi.list,
+    enabled: shouldLoadReferenceData,
+  });
   const organizationsQuery = useQuery({
     queryKey: ["organizations", "users-page"],
     queryFn: () => organizationsApi.list({ page: 1, limit: 100 }),
-    enabled: user?.roles.includes("SUPER_ADMIN") ?? false,
+    enabled: (user?.roles.includes("SUPER_ADMIN") ?? false) && shouldLoadReferenceData,
   });
 
   const form = useForm<UserSchema>({
@@ -136,8 +147,50 @@ export default function UsersPage() {
     () => (rolesQuery.data ?? []).filter((role) => assignableRoleNames.has(role.name)),
     [assignableRoleNames, rolesQuery.data],
   );
+  const academicCoordinatorRole = useMemo(
+    () => assignableRoles.find((role) => role.name === "ACADEMIC_COORDINATOR") ?? null,
+    [assignableRoles],
+  );
+  const adminRole = useMemo(
+    () => assignableRoles.find((role) => role.name === "ADMIN") ?? null,
+    [assignableRoles],
+  );
+  const staffRole = useMemo(
+    () => assignableRoles.find((role) => role.name === "STAFF") ?? null,
+    [assignableRoles],
+  );
+  const selectedRoleNames = useMemo(
+    () =>
+      assignableRoles
+        .filter((role) => form.watch("roleIds").includes(role.id))
+        .map((role) => role.name),
+    [assignableRoles, form],
+  );
+  const isAcademicCoordinatorFlow = selectedRoleNames.includes("ACADEMIC_COORDINATOR");
+  const isAdminFlow = selectedRoleNames.includes("ADMIN");
+  const isStaffFlow = selectedRoleNames.includes("STAFF");
 
   const canManageTargetUser = (targetUser: User): boolean => targetUser.roles.every((role) => assignableRoleNames.has(role));
+
+  const openCreateUserDialog = (presetRoleName?: string) => {
+    setEditingUser(null);
+    setRolePresetName(presetRoleName ?? null);
+
+    const presetRoleIds = presetRoleName
+      ? assignableRoles.filter((role) => role.name === presetRoleName).map((role) => role.id)
+      : [];
+
+    form.reset({
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      organizationId: user?.roles.includes("SUPER_ADMIN") ? undefined : user?.organizationId ?? undefined,
+      isActive: true,
+      roleIds: presetRoleIds,
+    });
+    setOpen(true);
+  };
 
   const columns = useMemo<Array<ColumnDef<User>>>(
     () => [
@@ -198,6 +251,7 @@ export default function UsersPage() {
                       return;
                     }
                     setEditingUser(row.original);
+                    setRolePresetName(null);
                     form.reset({
                       firstName: row.original.firstName,
                       lastName: row.original.lastName,
@@ -273,6 +327,12 @@ export default function UsersPage() {
       totalRolesAssigned: filteredUsers.reduce((sum, item) => sum + item.roles.length, 0),
     };
   }, [filteredUsers]);
+  const userLimitReached =
+    isTenantAdmin && user?.userLimit !== null ? (usersQuery.data?.total ?? 0) >= (user?.userLimit ?? 0) : false;
+  const userCapacityText =
+    isTenantAdmin && user?.userLimit !== null && usersQuery.data
+      ? `${usersQuery.data.total}/${user?.userLimit ?? 0} user slots used for this organization`
+      : "Users in the current page scope";
 
   if (usersQuery.isLoading) return <LoadingState rows={6} />;
   if (usersQuery.isError || !usersQuery.data) return <ErrorState description="Users could not be loaded." onRetry={() => usersQuery.refetch()} />;
@@ -281,12 +341,23 @@ export default function UsersPage() {
     <div className="space-y-6">
       <PageHeader eyebrow="Access control" title="Users management" description="Manage user accounts, activation states, and role assignment." />
       <OrganizationScopeBanner moduleLabel="User access control" />
+      <div className="rounded-2xl border bg-muted/30 p-4 text-sm">
+        <p className="font-medium">Recommended use</p>
+        <p className="mt-1 text-muted-foreground">
+          Use this area for organization access roles like admins, academic coordinators, and staff. For faculty onboarding, create the teacher profile first and provision login there. For learners, create the student record first and enable portal access there.
+        </p>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Visible users" value={String(userStats.totalUsers)} helper="Users in the current page scope" icon={UserCog} tone="sky" />
+        <MetricCard title="Visible users" value={String(userStats.totalUsers)} helper={userCapacityText} icon={UserCog} tone="sky" />
         <MetricCard title="Active users" value={String(userStats.activeUsers)} helper="Accounts currently enabled" icon={UserCheck} tone="emerald" />
         <MetricCard title="Inactive users" value={String(userStats.inactiveUsers)} helper="Accounts blocked from login" icon={UserX} tone="amber" />
         <MetricCard title="Role assignments" value={String(userStats.totalRolesAssigned)} helper="Total role entries across listed users" icon={ShieldCheck} tone="violet" />
       </div>
+      {userLimitReached ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
+          User limit reached for this organization. Increase the tenant user limit from the super admin organizations module before adding more users.
+        </div>
+      ) : null}
       <FilterBar
         search={search}
         onSearchChange={(value) => {
@@ -334,17 +405,55 @@ export default function UsersPage() {
                 setOpen(nextOpen);
                 if (!nextOpen) {
                   setEditingUser(null);
+                  setRolePresetName(null);
                   form.reset();
                 }
               }}
             >
-              <DialogTrigger asChild>
-                <Button>Create user</Button>
-              </DialogTrigger>
+              <div className="flex flex-wrap items-center gap-2">
+                {adminRole ? (
+                  <Button variant="outline" disabled={userLimitReached} onClick={() => openCreateUserDialog("ADMIN")}>
+                    Create admin
+                  </Button>
+                ) : null}
+                {academicCoordinatorRole ? (
+                  <Button variant="outline" disabled={userLimitReached} onClick={() => openCreateUserDialog("ACADEMIC_COORDINATOR")}>
+                    Create academic coordinator
+                  </Button>
+                ) : null}
+                {staffRole ? (
+                  <Button variant="outline" disabled={userLimitReached} onClick={() => openCreateUserDialog("STAFF")}>
+                    Create staff
+                  </Button>
+                ) : null}
+                <DialogTrigger asChild>
+                  <Button disabled={userLimitReached} onClick={() => openCreateUserDialog()}>
+                    Create user
+                  </Button>
+                </DialogTrigger>
+              </div>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{editingUser ? "Edit user" : "Create user"}</DialogTitle>
-                  <DialogDescription>Fields align with `CreateUserDto` and `UpdateUserDto` from the NestJS backend.</DialogDescription>
+                  <DialogTitle>
+                    {editingUser
+                      ? "Edit user"
+                      : rolePresetName === "ADMIN"
+                        ? "Create admin"
+                        : rolePresetName === "ACADEMIC_COORDINATOR"
+                          ? "Create academic coordinator"
+                          : rolePresetName === "STAFF"
+                            ? "Create staff"
+                            : "Create user"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {rolePresetName === "ADMIN"
+                      ? "This guided flow provisions an organization admin account without manually assembling the role assignment."
+                      : rolePresetName === "ACADEMIC_COORDINATOR"
+                        ? "This guided flow provisions an academic coordinator account without manually assembling the role assignment."
+                        : rolePresetName === "STAFF"
+                          ? "This guided flow provisions a staff account without manually assembling the role assignment."
+                          : "Fields align with `CreateUserDto` and `UpdateUserDto` from the NestJS backend."}
+                  </DialogDescription>
                 </DialogHeader>
                 <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
                   <FormField label="First name" required error={form.formState.errors.firstName}>
@@ -381,6 +490,11 @@ export default function UsersPage() {
                   </FormField>
                   <div className="space-y-2 md:col-span-2">
                     <p className="text-sm font-medium">Roles</p>
+                    {rolePresetName ? (
+                      <div className="rounded-xl border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                        Role preset: <span className="font-medium text-foreground">{rolePresetName.replaceAll("_", " ")}</span>
+                      </div>
+                    ) : null}
                     <div className="grid gap-2 rounded-xl border p-4">
                       {assignableRoles.map((role) => (
                         <label key={role.id} className="flex items-center gap-3 text-sm">
@@ -402,6 +516,15 @@ export default function UsersPage() {
                     </div>
                     {form.formState.errors.roleIds ? <p className="text-xs text-destructive">{form.formState.errors.roleIds.message}</p> : null}
                   </div>
+                  {(isAdminFlow || isAcademicCoordinatorFlow || isStaffFlow) && !editingUser ? (
+                    <div className="rounded-2xl border bg-muted/30 p-4 text-sm md:col-span-2">
+                      {isAdminFlow
+                        ? "Admins are best used for organization-wide operations, access control, student records, academics, and tenant settings."
+                        : isAcademicCoordinatorFlow
+                          ? "Academic coordinators are best used for academic operations oversight, including subjects, teachers, timetables, exams, and report workflows."
+                          : "Staff accounts are best used for day-to-day support work with restricted permissions and no platform governance access."}
+                    </div>
+                  ) : null}
                   <label className="flex items-center gap-3 text-sm md:col-span-2">
                     <input type="checkbox" checked={form.watch("isActive")} onChange={(event) => form.setValue("isActive", event.target.checked, { shouldDirty: true })} />
                     <span>User account is active</span>

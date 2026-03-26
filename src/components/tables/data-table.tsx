@@ -56,7 +56,7 @@ export function DataTable<TData>({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border bg-card">
+      <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -89,7 +89,7 @@ export function DataTable<TData>({
         </Table>
       </div>
       {pagination ? (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             Page {pagination.pageIndex + 1}
             {pageCount ? ` of ${pageCount}` : ""}
