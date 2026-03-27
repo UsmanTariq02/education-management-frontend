@@ -15,6 +15,11 @@ export const endpoints = {
   },
   portal: {
     dashboard: "/portal/dashboard",
+    assessments: "/portal/assessments",
+    assessmentDetail: (assessmentId: string) => `/portal/assessments/${assessmentId}`,
+    assessmentStart: (assessmentId: string) => `/portal/assessments/${assessmentId}/start`,
+    assessmentAttemptAnswers: (attemptId: string) => `/portal/assessments/attempts/${attemptId}/answers`,
+    assessmentAttemptSubmit: (attemptId: string) => `/portal/assessments/attempts/${attemptId}/submit`,
   },
   inquiries: {
     contact: "/inquiries/contact",
@@ -92,6 +97,10 @@ export const endpoints = {
   exams: {
     list: "/exams",
     detail: (id: string) => `/exams/${id}`,
+  },
+  assessments: {
+    list: "/assessments",
+    detail: (id: string) => `/assessments/${id}`,
   },
   examResults: {
     list: "/exam-results",

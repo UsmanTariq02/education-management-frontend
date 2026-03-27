@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pie, PieChart, Cell, ResponsiveContainer, RadialBarChart, RadialBar, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { BellRing, CalendarCheck2, CreditCard, GraduationCap, LogOut } from "lucide-react";
+import { BellRing, CalendarCheck2, CreditCard, FileQuestion, GraduationCap, LogOut } from "lucide-react";
 import { portalApi } from "@/features/portal/api/portal-api";
 import { usePortalAuth } from "@/providers/portal-auth-provider";
 import { MetricCard } from "@/components/cards/metric-card";
@@ -107,7 +107,7 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
         <MetricCard title="Pending dues" value={formatCurrency(feeSummary.pendingAmount)} helper={`${feeSummary.overdueCount} overdue fee cycles`} icon={CreditCard} tone={feeSummary.pendingAmount > 0 ? "amber" : "emerald"} />
         <MetricCard title="Attendance rate" value={`${attendanceSummary.attendanceRate}%`} helper={`${attendanceSummary.totalEntries} attendance entries`} icon={CalendarCheck2} tone={attendanceSummary.attendanceRate >= 75 ? "sky" : "rose"} />
         <MetricCard title="Published results" value={String(academicSummary.publishedResults)} helper={academicSummary.latestGrade ? `Latest grade ${academicSummary.latestGrade}` : "No published results yet"} icon={GraduationCap} tone="violet" />
-        <MetricCard title="Reminders" value={String(reminderSummary.total)} helper={`${reminderSummary.sent} delivered · ${reminderSummary.failed} failed`} icon={BellRing} tone="amber" />
+        <MetricCard title="Assessments" value={String(academicSummary.assessmentSummary.availableCount)} helper={`${academicSummary.assessmentSummary.inProgressCount} in progress`} icon={FileQuestion} tone="sky" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
@@ -263,6 +263,66 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
               ))
             ) : (
               <p className="text-sm text-muted-foreground">No reminders have been logged yet.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Assessment center</CardTitle>
+            <CardDescription>Start available quizzes and review recent attempt activity.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border px-4 py-3 text-sm">
+                <p className="text-muted-foreground">Available</p>
+                <p className="mt-1 text-xl font-semibold">{academicSummary.assessmentSummary.availableCount}</p>
+              </div>
+              <div className="rounded-2xl border px-4 py-3 text-sm">
+                <p className="text-muted-foreground">In progress</p>
+                <p className="mt-1 text-xl font-semibold">{academicSummary.assessmentSummary.inProgressCount}</p>
+              </div>
+              <div className="rounded-2xl border px-4 py-3 text-sm">
+                <p className="text-muted-foreground">Completed</p>
+                <p className="mt-1 text-xl font-semibold">{academicSummary.assessmentSummary.completedCount}</p>
+              </div>
+            </div>
+            {variant === "student" ? (
+              <Button asChild>
+                <Link href="/portal/student/assessments">Open assessment center</Link>
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">Parents can monitor assessment activity here while students take tests from their own portal.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent assessment attempts</CardTitle>
+            <CardDescription>Latest assessment activity recorded in this portal.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {academicSummary.assessmentSummary.recentAttempts.length ? (
+              academicSummary.assessmentSummary.recentAttempts.map((attempt) => (
+                <div key={attempt.attemptId} className="rounded-2xl border p-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{attempt.title}</p>
+                      <p className="text-muted-foreground">
+                        {attempt.subjectName}
+                        {attempt.percentage !== null ? ` · ${attempt.percentage}%` : ""}
+                      </p>
+                    </div>
+                    <Badge variant={attempt.status === "IN_PROGRESS" ? "warning" : "outline"}>{attempt.status.replaceAll("_", " ")}</Badge>
+                  </div>
+                  {attempt.submittedAt ? <p className="mt-2 text-xs text-muted-foreground">{formatDate(attempt.submittedAt, "MMM d, yyyy p")}</p> : null}
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No assessment attempts have been recorded yet.</p>
             )}
           </CardContent>
         </Card>

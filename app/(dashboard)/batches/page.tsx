@@ -118,7 +118,7 @@ export default function BatchesPage() {
           header: "Actions",
           cell: ({ row }) => (
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" asChild>
+              <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" asChild>
                 <Link href={`/batches/${row.original.id}`}>View</Link>
               </Button>
               {canManage ? (

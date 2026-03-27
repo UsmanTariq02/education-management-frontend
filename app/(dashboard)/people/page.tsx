@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { BriefcaseBusiness, GraduationCap, ShieldCheck, Users } from "lucide-react";
+import { ArrowUpRight, BriefcaseBusiness, GraduationCap, ShieldCheck, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { MetricCard } from "@/components/cards/metric-card";
@@ -14,11 +14,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import { studentsApi } from "@/features/students/api/students-api";
 import { teachersApi } from "@/features/teachers/api/teachers-api";
 import { usersApi } from "@/features/users/api/users-api";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useAnyPermission } from "@/hooks/use-permission";
+import { useAnyPermission, usePermission } from "@/hooks/use-permission";
 import { useAuth } from "@/providers/auth-provider";
 
 type DirectoryPerson = {
@@ -38,9 +39,14 @@ export default function PeopleDirectoryPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [typeFilter, setTypeFilter] = useState("ALL");
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageSize = 12;
   const canReadUsers = useAnyPermission(["users.read"]);
   const canReadTeachers = useAnyPermission(["teachers.read"]);
   const canReadStudents = useAnyPermission(["students.read"]);
+  const canManageUsers = usePermission("users.update");
+  const canManageTeachers = usePermission("teachers.update");
+  const canManageStudents = usePermission("students.update");
 
   const usersQuery = useQuery({
     queryKey: ["people-directory", "users", debouncedSearch, user?.id ?? "guest", user?.organizationId ?? "platform"],
@@ -106,6 +112,12 @@ export default function PeopleDirectoryPage() {
     [rows, typeFilter],
   );
 
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const pagedRows = useMemo(
+    () => filteredRows.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize),
+    [filteredRows, pageIndex, pageSize],
+  );
+
   const stats = useMemo(
     () => ({
       total: filteredRows.length,
@@ -160,18 +172,35 @@ export default function PeopleDirectoryPage() {
       },
       {
         id: "actions",
-        header: "Actions",
-        cell: ({ row }) =>
-          row.original.href ? (
-            <Button variant="ghost" size="sm" asChild>
+        header: "Action",
+        cell: ({ row }) => {
+          if (!row.original.href) return null;
+
+          const label =
+            row.original.type === "STUDENT"
+              ? canManageStudents
+                ? "View Profile"
+                : "Open"
+              : row.original.type === "TEACHER"
+                ? canManageTeachers
+                  ? "Manage"
+                  : "Open"
+                : canManageUsers
+                  ? "Manage"
+                  : "Open";
+
+          return (
+            <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" asChild>
               <Link href={row.original.href}>
-                {row.original.type === "STUDENT" ? "View" : "Open"}
+                {label}
+                <ArrowUpRight className="h-4 w-4" />
               </Link>
             </Button>
-          ) : null,
+          );
+        },
       },
     ],
-    [user?.roles],
+    [canManageStudents, canManageTeachers, canManageUsers, user?.roles],
   );
 
   const isLoading = [usersQuery, teachersQuery, studentsQuery].some((query) => query.isLoading);
@@ -207,18 +236,34 @@ export default function PeopleDirectoryPage() {
       </div>
       <FilterBar
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setPageIndex(0);
+        }}
         searchPlaceholder="Search across users, teachers, and students..."
         filters={
-          <select className="h-10 rounded-xl border bg-background px-3 text-sm" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+          <NativeSelect
+            value={typeFilter}
+            onChange={(event) => {
+              setTypeFilter(event.target.value);
+              setPageIndex(0);
+            }}
+            className="min-w-[180px]"
+          >
             <option value="ALL">All people</option>
             <option value="USER">Users</option>
             <option value="TEACHER">Teachers</option>
             <option value="STUDENT">Students</option>
-          </select>
+          </NativeSelect>
         }
       />
-      <DataTable data={filteredRows} columns={columns} />
+      <DataTable
+        data={pagedRows}
+        columns={columns}
+        pageCount={pageCount}
+        pagination={{ pageIndex, pageSize }}
+        onPaginationChange={(state) => setPageIndex(Math.min(state.pageIndex, pageCount - 1))}
+      />
     </div>
   );
 }

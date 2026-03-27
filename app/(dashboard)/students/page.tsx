@@ -175,13 +175,14 @@ export default function StudentsPage() {
           header: "Actions",
           cell: ({ row }) => (
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" asChild>
+              <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" asChild>
                 <Link href={`/students/${row.original.id}`}>View</Link>
               </Button>
               {canManage ? (
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
+                  className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5"
                   onClick={() => {
                     setEditingStudent(row.original);
                     form.reset({

@@ -238,14 +238,15 @@ export default function UsersPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedUser(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedUser(row.original)}>
               View
             </Button>
             {canManage ? (
               <>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
+                  className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5"
                   disabled={!canManageTargetUser(row.original)}
                   onClick={() => {
                     if (!canManageTargetUser(row.original)) {
@@ -270,8 +271,9 @@ export default function UsersPage() {
                   Edit
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
+                  className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5"
                   disabled={!canManageTargetUser(row.original) || toggleActiveMutation.isPending}
                   onClick={() => {
                     if (!canManageTargetUser(row.original)) {

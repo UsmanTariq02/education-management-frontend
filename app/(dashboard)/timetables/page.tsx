@@ -261,13 +261,14 @@ export default function TimetablesPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedItem(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10" onClick={() => setSelectedItem(row.original)}>
               View
             </Button>
             {canManage ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10"
                 onClick={() => {
                   setEditingItem(row.original);
                   form.reset({
@@ -331,11 +332,13 @@ export default function TimetablesPage() {
         }}
         searchPlaceholder="Search by batch, subject, teacher, or room..."
         action={
-          canCreate ? (
+          canCreate || canManage ? (
             <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button disabled={!user?.organizationId}>Create timetable entry</Button>
-              </DialogTrigger>
+              {canCreate ? (
+                <DialogTrigger asChild>
+                  <Button disabled={!user?.organizationId}>Create timetable entry</Button>
+                </DialogTrigger>
+              ) : null}
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>{editingItem ? "Edit timetable entry" : "Create timetable entry"}</DialogTitle>

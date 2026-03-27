@@ -15,6 +15,9 @@ import type {
   ReminderStatus,
   StudentStatus,
   StudentDocumentType,
+  AssessmentQuestionType,
+  AssessmentStatus,
+  AssessmentType,
   StudentExamResultStatus,
   TimetableDayOfWeek,
   ClassDeliveryMode,
@@ -288,6 +291,61 @@ export interface CreateExamDto {
 }
 
 export interface UpdateExamDto extends Partial<CreateExamDto> {}
+
+export interface CreateAssessmentQuestionOptionDto {
+  text: string;
+  isCorrect?: boolean;
+}
+
+export interface CreateAssessmentQuestionDto {
+  type: AssessmentQuestionType;
+  prompt: string;
+  helperText?: string;
+  explanation?: string;
+  marks?: number;
+  acceptedAnswers?: string[];
+  correctBooleanAnswer?: boolean;
+  options?: CreateAssessmentQuestionOptionDto[];
+}
+
+export interface CreateAssessmentDto {
+  academicSessionId?: string;
+  batchId: string;
+  subjectId: string;
+  teacherId?: string;
+  title: string;
+  code: string;
+  description?: string;
+  instructions?: string;
+  type?: AssessmentType;
+  status?: AssessmentStatus;
+  durationMinutes?: number;
+  passMarks?: number;
+  startsAt?: string;
+  endsAt?: string;
+  availableFrom?: string;
+  availableUntil?: string;
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
+  showResultImmediately?: boolean;
+  allowMultipleAttempts?: boolean;
+  maxAttempts?: number;
+  negativeMarkingEnabled?: boolean;
+  negativeMarkingPerWrong?: number;
+  questions: CreateAssessmentQuestionDto[];
+}
+
+export interface UpdateAssessmentDto extends Partial<CreateAssessmentDto> {}
+
+export interface SavePortalAssessmentAnswerDto {
+  questionId: string;
+  selectedOptionId?: string;
+  answerText?: string;
+}
+
+export interface SavePortalAssessmentAttemptDto {
+  answers: SavePortalAssessmentAnswerDto[];
+}
 
 export interface CreateExamResultItemDto {
   examSubjectId: string;

@@ -181,11 +181,11 @@ export default function OnlineClassesPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedSession(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10" onClick={() => setSelectedSession(row.original)}>
               View
             </Button>
             {row.original.meetingUrl ? (
-              <Button variant="ghost" size="sm" asChild>
+              <Button variant="outline" size="sm" className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10" asChild>
                 <a href={row.original.meetingUrl} target="_blank" rel="noreferrer">
                   Open class
                 </a>
@@ -193,8 +193,9 @@ export default function OnlineClassesPage() {
             ) : null}
             {canUpdate && row.original.provider === "GOOGLE_MEET" ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10"
                 onClick={() => generateMeetMutation.mutate(row.original.id)}
                 disabled={generateMeetMutation.isPending}
               >
@@ -203,8 +204,9 @@ export default function OnlineClassesPage() {
             ) : null}
             {canSync && row.original.provider === "GOOGLE_MEET" ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10"
                 onClick={() => syncGoogleMeetMutation.mutate(row.original.id)}
                 disabled={syncGoogleMeetMutation.isPending}
               >
@@ -213,8 +215,9 @@ export default function OnlineClassesPage() {
             ) : null}
             {canProcessAttendance ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10"
                 onClick={() => processAttendanceMutation.mutate(row.original.id)}
                 disabled={processAttendanceMutation.isPending}
               >

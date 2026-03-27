@@ -279,7 +279,7 @@ export default function OrganizationsPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedOrganization(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedOrganization(row.original)}>
               View
             </Button>
             <Button

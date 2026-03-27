@@ -148,7 +148,7 @@ export default function FeePlansPage() {
           id: "actions",
           header: "Actions",
           cell: ({ row }) => (
-            <Button variant="ghost" size="sm" onClick={() => setSelectedPlan(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedPlan(row.original)}>
               View
             </Button>
           ),

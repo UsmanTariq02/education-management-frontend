@@ -130,7 +130,7 @@ export default function ActivityLogsPage() {
         id: "view",
         header: "View",
         cell: ({ row }) => (
-          <Button variant="ghost" size="sm" onClick={() => setSelectedLog(row.original)}>
+          <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedLog(row.original)}>
             View
           </Button>
         ),

@@ -121,13 +121,14 @@ export default function SubjectsPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedSubject(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10" onClick={() => setSelectedSubject(row.original)}>
               View
             </Button>
             {canManage ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10"
                 onClick={() => {
                   setEditingSubject(row.original);
                   form.reset({
@@ -181,11 +182,13 @@ export default function SubjectsPage() {
           </NativeSelect>
         }
         action={
-          canCreate ? (
+          canCreate || canManage ? (
             <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button disabled={!user?.organizationId}>Create subject</Button>
-              </DialogTrigger>
+              {canCreate ? (
+                <DialogTrigger asChild>
+                  <Button disabled={!user?.organizationId}>Create subject</Button>
+                </DialogTrigger>
+              ) : null}
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>{editingSubject ? "Edit subject" : "Create subject"}</DialogTitle>

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
+import { ArrowUpRight, ShieldCheck } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { rolesApi } from "@/features/roles/api/roles-api";
@@ -28,9 +29,11 @@ export default function RolesPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.roles.includes("SUPER_ADMIN") ?? false;
   const [search, setSearch] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const pageSize = 10;
   const canManage = usePermission("users.update") && isSuperAdmin;
   const queryClient = useQueryClient();
   const rolesQuery = useQuery({ queryKey: ["roles"], queryFn: rolesApi.list, enabled: isSuperAdmin });
@@ -46,6 +49,11 @@ export default function RolesPage() {
   });
 
   const filteredRoles = rolesQuery.data?.filter((role) => role.name.toLowerCase().includes(search.toLowerCase())) ?? [];
+  const pageCount = Math.max(1, Math.ceil(filteredRoles.length / pageSize));
+  const pagedRoles = useMemo(
+    () => filteredRoles.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize),
+    [filteredRoles, pageIndex, pageSize],
+  );
 
   const mutation = useMutation({
     mutationFn: async (values: RoleSchema) => {
@@ -68,8 +76,11 @@ export default function RolesPage() {
         accessorKey: "name",
         header: "Role",
         cell: ({ row }) => (
-          <div>
-            <p className="font-medium">{row.original.name}</p>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <p className="font-medium">{row.original.name}</p>
+            </div>
             <p className="text-xs text-muted-foreground">{row.original.description}</p>
           </div>
         ),
@@ -92,13 +103,15 @@ export default function RolesPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedRole(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedRole(row.original)}>
               View
+              <ArrowUpRight className="h-4 w-4" />
             </Button>
             {canManage ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5"
                 onClick={() => {
                   setEditingRole(row.original);
                   form.reset({
@@ -143,7 +156,10 @@ export default function RolesPage() {
       <PageHeader eyebrow="Authorization" title="Roles management" description="Create operational roles and assign permission sets by module." />
       <FilterBar
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setPageIndex(0);
+        }}
         exportConfig={{ filename: "roles-management", rows: exportRows }}
         action={
           canManage ? (
@@ -198,7 +214,13 @@ export default function RolesPage() {
           ) : null
         }
       />
-      <DataTable data={filteredRoles} columns={columns} />
+      <DataTable
+        data={pagedRoles}
+        columns={columns}
+        pageCount={pageCount}
+        pagination={{ pageIndex, pageSize }}
+        onPaginationChange={(state) => setPageIndex(Math.min(state.pageIndex, pageCount - 1))}
+      />
       <Dialog open={Boolean(selectedRole)} onOpenChange={(nextOpen) => !nextOpen && setSelectedRole(null)}>
         <DialogContent>
           <DialogHeader>

@@ -14,6 +14,10 @@ export type ClassDeliveryMode = "OFFLINE" | "ONLINE" | "HYBRID";
 export type OnlineClassProvider = "GOOGLE_MEET" | "ZOOM";
 export type OnlineClassSessionStatus = "SCHEDULED" | "LIVE" | "COMPLETED" | "CANCELLED";
 export type SyncJobStatus = "PENDING" | "SUCCESS" | "FAILED";
+export type AssessmentType = "QUIZ" | "TEST" | "ASSIGNMENT" | "PRACTICE";
+export type AssessmentQuestionType = "MCQ" | "TRUE_FALSE" | "FILL_IN_THE_BLANK" | "SHORT_ANSWER" | "LONG_ANSWER";
+export type AssessmentStatus = "DRAFT" | "PUBLISHED" | "CLOSED";
+export type AssessmentResultStatus = "PROVISIONAL" | "FINALIZED";
 export type StudentDocumentType = "ID_CARD" | "ADMISSION_FORM" | "BIRTH_CERTIFICATE" | "GUARDIAN_ID" | "ACADEMIC_RECORD" | "MEDICAL_RECORD" | "OTHER";
 export type OrganizationAssetType = "LOGO" | "LETTERHEAD" | "STAMP" | "BROCHURE" | "OTHER";
 export type OrganizationModule =
@@ -376,6 +380,168 @@ export interface Exam {
   updatedAt: string;
 }
 
+export interface AssessmentQuestionOption {
+  id: string;
+  text: string;
+  orderIndex: number;
+  isCorrect: boolean;
+}
+
+export interface AssessmentQuestion {
+  id: string;
+  type: AssessmentQuestionType;
+  prompt: string;
+  helperText: string | null;
+  explanation: string | null;
+  orderIndex: number;
+  marks: number;
+  acceptedAnswers: string[];
+  correctBooleanAnswer: boolean | null;
+  options: AssessmentQuestionOption[];
+}
+
+export interface Assessment {
+  id: string;
+  organizationId: string;
+  organizationName: string;
+  academicSessionId: string | null;
+  academicSessionName: string | null;
+  batchId: string;
+  batchName: string;
+  batchCode: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  teacherId: string | null;
+  teacherName: string | null;
+  title: string;
+  code: string;
+  description: string | null;
+  instructions: string | null;
+  type: AssessmentType;
+  status: AssessmentStatus;
+  durationMinutes: number;
+  totalMarks: number;
+  passMarks: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  availableFrom: string | null;
+  availableUntil: string | null;
+  shuffleQuestions: boolean;
+  shuffleOptions: boolean;
+  showResultImmediately: boolean;
+  allowMultipleAttempts: boolean;
+  maxAttempts: number;
+  negativeMarkingEnabled: boolean;
+  negativeMarkingPerWrong: number | null;
+  questionCount: number;
+  questions: AssessmentQuestion[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortalAssessmentAttemptAnswer {
+  questionId: string;
+  selectedOptionId: string | null;
+  answerText: string | null;
+  awardedMarks: number | null;
+  isCorrect: boolean | null;
+  feedback: string | null;
+}
+
+export type AssessmentAttemptStatus = "IN_PROGRESS" | "SUBMITTED" | "AUTO_GRADED" | "REVIEW_PENDING" | "COMPLETED";
+
+export interface PortalAssessmentAttempt {
+  id: string;
+  status: AssessmentAttemptStatus;
+  attemptNumber: number;
+  startedAt: string;
+  submittedAt: string | null;
+  requiresManualReview: boolean;
+  obtainedMarks: number | null;
+  totalMarks: number | null;
+  percentage: number | null;
+  resultStatus: AssessmentResultStatus | null;
+  answers: PortalAssessmentAttemptAnswer[];
+}
+
+export interface PortalAssessmentListItem {
+  id: string;
+  title: string;
+  code: string;
+  subjectName: string;
+  batchName: string;
+  type: AssessmentType;
+  durationMinutes: number;
+  totalMarks: number;
+  passMarks: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  availableFrom: string | null;
+  availableUntil: string | null;
+  showResultImmediately: boolean;
+  questionCount: number;
+  latestAttempt: {
+    id: string;
+    status: AssessmentAttemptStatus;
+    attemptNumber: number;
+    submittedAt: string | null;
+    resultStatus: AssessmentResultStatus | null;
+    percentage: number | null;
+  } | null;
+}
+
+export interface PortalAssessmentQuestion {
+  id: string;
+  type: AssessmentQuestionType;
+  prompt: string;
+  helperText: string | null;
+  orderIndex: number;
+  marks: number;
+  options: Array<{
+    id: string;
+    text: string;
+    orderIndex: number;
+  }>;
+}
+
+export interface PortalAssessmentDetail {
+  id: string;
+  title: string;
+  code: string;
+  description: string | null;
+  instructions: string | null;
+  subjectName: string;
+  batchName: string;
+  type: AssessmentType;
+  durationMinutes: number;
+  totalMarks: number;
+  passMarks: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  availableFrom: string | null;
+  availableUntil: string | null;
+  showResultImmediately: boolean;
+  allowMultipleAttempts: boolean;
+  maxAttempts: number;
+  questionCount: number;
+  questions: PortalAssessmentQuestion[];
+  activeAttempt: PortalAssessmentAttempt | null;
+}
+
+export interface PortalAssessmentSubmitResult {
+  attemptId: string;
+  status: AssessmentResultStatus;
+  requiresManualReview: boolean;
+  obtainedMarks: number;
+  totalMarks: number;
+  percentage: number;
+  correctAnswers: number;
+  incorrectAnswers: number;
+  unansweredCount: number;
+  answers: PortalAssessmentAttemptAnswer[];
+}
+
 export type StudentExamResultStatus = "DRAFT" | "PUBLISHED";
 export type PortalAccountType = "STUDENT" | "PARENT";
 
@@ -604,6 +770,28 @@ export interface PortalDashboard {
       room: string | null;
       batchName: string;
     }>;
+    assessmentSummary: {
+      availableCount: number;
+      inProgressCount: number;
+      completedCount: number;
+      upcoming: Array<{
+        id: string;
+        title: string;
+        subjectName: string;
+        type: AssessmentType;
+        availableUntil: string | null;
+        durationMinutes: number;
+      }>;
+      recentAttempts: Array<{
+        attemptId: string;
+        assessmentId: string;
+        title: string;
+        subjectName: string;
+        status: AssessmentAttemptStatus;
+        percentage: number | null;
+        submittedAt: string | null;
+      }>;
+    };
   };
 }
 

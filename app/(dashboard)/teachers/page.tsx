@@ -146,13 +146,14 @@ export default function TeachersPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedTeacher(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10" onClick={() => setSelectedTeacher(row.original)}>
               View
             </Button>
             {canManage ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="rounded-full border-primary/15 bg-background/80 px-3 font-medium shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/10"
                 onClick={() => {
                   setEditingTeacher(row.original);
                   form.reset({
@@ -220,11 +221,13 @@ export default function TeachersPage() {
           </NativeSelect>
         }
         action={
-          canCreate ? (
+          canCreate || canManage ? (
             <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button disabled={!user?.organizationId}>Create teacher</Button>
-              </DialogTrigger>
+              {canCreate ? (
+                <DialogTrigger asChild>
+                  <Button disabled={!user?.organizationId}>Create teacher</Button>
+                </DialogTrigger>
+              ) : null}
               <DialogContent className="max-w-3xl">
                 <DialogHeader>
                   <DialogTitle>{editingTeacher ? "Edit teacher" : "Create teacher"}</DialogTitle>

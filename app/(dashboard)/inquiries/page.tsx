@@ -113,7 +113,7 @@ export default function InquiriesPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedInquiry(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedInquiry(row.original)}>
               View
             </Button>
             <Button variant="ghost" size="icon" asChild>
