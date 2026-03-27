@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarClock, DoorOpen, TableProperties, UserRound } from "lucide-react";
+import { CalendarClock, DoorOpen, LayoutGrid, Rows3, TableProperties, UserRound } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { NativeSelect } from "@/components/ui/native-select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePermission } from "@/hooks/use-permission";
 import { normalizeApiError } from "@/lib/api/errors";
@@ -39,6 +40,7 @@ export default function TimetablesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
+  const [viewMode, setViewMode] = useState<"table" | "week" | "teachers" | "rooms">("week");
   const [pageIndex, setPageIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TimetableEntry | null>(null);
@@ -132,6 +134,80 @@ export default function TimetablesPage() {
       teacherMapped: items.filter((item) => item.teacherId).length,
       active: items.filter((item) => item.isActive).length,
     }),
+    [items],
+  );
+  const weeklyBoard = useMemo(
+    () =>
+      days.map((day) => ({
+        day,
+        entries: items
+          .filter((item) => item.dayOfWeek === day)
+          .slice()
+          .sort((left, right) => left.startTime.localeCompare(right.startTime)),
+      })),
+    [items],
+  );
+  const teacherBoard = useMemo(
+    () =>
+      Array.from(
+        items.reduce((map, item) => {
+          const key = item.teacherName ?? "Unassigned";
+          const current = map.get(key) ?? {
+            name: key,
+            entries: [] as TimetableEntry[],
+            totalClasses: 0,
+            onlineClasses: 0,
+          };
+          current.entries.push(item);
+          current.totalClasses += 1;
+          if (item.deliveryMode !== "OFFLINE") {
+            current.onlineClasses += 1;
+          }
+          map.set(key, current);
+          return map;
+        }, new Map<string, { name: string; entries: TimetableEntry[]; totalClasses: number; onlineClasses: number }>()),
+      )
+        .map(([, value]) => ({
+          ...value,
+          entries: value.entries.slice().sort((left, right) => {
+            if (left.dayOfWeek === right.dayOfWeek) {
+              return left.startTime.localeCompare(right.startTime);
+            }
+            return days.indexOf(left.dayOfWeek) - days.indexOf(right.dayOfWeek);
+          }),
+        }))
+        .sort((left, right) => right.totalClasses - left.totalClasses),
+    [items],
+  );
+  const roomBoard = useMemo(
+    () =>
+      Array.from(
+        items.reduce((map, item) => {
+          const key = item.deliveryMode === "ONLINE" ? "Online delivery" : item.room ?? "Room pending";
+          const current = map.get(key) ?? {
+            name: key,
+            entries: [] as TimetableEntry[],
+            totalClasses: 0,
+            batches: new Set<string>(),
+          };
+          current.entries.push(item);
+          current.totalClasses += 1;
+          current.batches.add(item.batchCode);
+          map.set(key, current);
+          return map;
+        }, new Map<string, { name: string; entries: TimetableEntry[]; totalClasses: number; batches: Set<string> }>()),
+      )
+        .map(([, value]) => ({
+          ...value,
+          totalBatches: value.batches.size,
+          entries: value.entries.slice().sort((left, right) => {
+            if (left.dayOfWeek === right.dayOfWeek) {
+              return left.startTime.localeCompare(right.startTime);
+            }
+            return days.indexOf(left.dayOfWeek) - days.indexOf(right.dayOfWeek);
+          }),
+        }))
+        .sort((left, right) => right.totalClasses - left.totalClasses),
     [items],
   );
 
@@ -378,13 +454,160 @@ export default function TimetablesPage() {
           ) : null
         }
       />
-      <DataTable
-        data={items}
-        columns={columns}
-        pageCount={Math.ceil(query.data.total / query.data.limit)}
-        pagination={{ pageIndex, pageSize: query.data.limit }}
-        onPaginationChange={(state) => setPageIndex(state.pageIndex)}
-      />
+      <div className="flex flex-wrap gap-2">
+        <Button variant={viewMode === "week" ? "default" : "outline"} size="sm" onClick={() => setViewMode("week")}>
+          <LayoutGrid className="mr-2 h-4 w-4" />
+          Weekly board
+        </Button>
+        <Button variant={viewMode === "teachers" ? "default" : "outline"} size="sm" onClick={() => setViewMode("teachers")}>
+          <UserRound className="mr-2 h-4 w-4" />
+          Teacher view
+        </Button>
+        <Button variant={viewMode === "rooms" ? "default" : "outline"} size="sm" onClick={() => setViewMode("rooms")}>
+          <DoorOpen className="mr-2 h-4 w-4" />
+          Room view
+        </Button>
+        <Button variant={viewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setViewMode("table")}>
+          <Rows3 className="mr-2 h-4 w-4" />
+          Table view
+        </Button>
+      </div>
+
+      {viewMode === "week" ? (
+        <ScrollArea className="w-full rounded-3xl border bg-card">
+          <div className="grid min-w-[980px] grid-cols-7 gap-0">
+            {weeklyBoard.map((column) => (
+              <div key={column.day} className="border-r last:border-r-0">
+                <div className="border-b bg-muted/40 px-4 py-3">
+                  <p className="text-sm font-semibold">{column.day.slice(0, 3)}</p>
+                  <p className="text-xs text-muted-foreground">{column.entries.length} slots</p>
+                </div>
+                <div className="space-y-3 p-3">
+                  {column.entries.length ? (
+                    column.entries.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className="w-full rounded-2xl border bg-background p-3 text-left transition hover:border-primary/40 hover:bg-muted/40"
+                        onClick={() => setSelectedItem(entry)}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-medium">{entry.subjectCode}</p>
+                            <p className="text-xs text-muted-foreground">{entry.batchCode}</p>
+                          </div>
+                          <Badge variant={entry.deliveryMode === "ONLINE" ? "default" : "secondary"}>{entry.deliveryMode}</Badge>
+                        </div>
+                        <p className="mt-3 text-sm">{entry.startTime} - {entry.endTime}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{entry.teacherName ?? "Teacher pending"}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {entry.deliveryMode === "ONLINE" ? entry.onlineClassProvider ?? "Provider pending" : entry.room ?? "Room pending"}
+                        </p>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed p-4 text-center text-xs text-muted-foreground">No classes planned</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      ) : null}
+
+      {viewMode === "teachers" ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {teacherBoard.length ? (
+            teacherBoard.map((teacher) => (
+              <div key={teacher.name} className="rounded-3xl border bg-card p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-base font-semibold">{teacher.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {teacher.totalClasses} classes · {teacher.onlineClasses} online / hybrid
+                    </p>
+                  </div>
+                  <Badge variant="outline">{new Set(teacher.entries.map((entry) => entry.batchCode)).size} batches</Badge>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {teacher.entries.slice(0, 6).map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left transition hover:border-primary/40 hover:bg-muted/40"
+                      onClick={() => setSelectedItem(entry)}
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{entry.dayOfWeek.slice(0, 3)} · {entry.startTime} - {entry.endTime}</p>
+                        <p className="text-xs text-muted-foreground">{entry.subjectName} · {entry.batchName}</p>
+                      </div>
+                      <Badge variant={entry.isActive ? "secondary" : "outline"}>{entry.isActive ? "Active" : "Inactive"}</Badge>
+                    </button>
+                  ))}
+                  {teacher.entries.length > 6 ? (
+                    <p className="text-xs text-muted-foreground">+{teacher.entries.length - 6} more classes in the current scope</p>
+                  ) : null}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground xl:col-span-2">
+              No timetable entries are mapped to teachers in the current scope.
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {viewMode === "rooms" ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {roomBoard.length ? (
+            roomBoard.map((room) => (
+              <div key={room.name} className="rounded-3xl border bg-card p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-base font-semibold">{room.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {room.totalClasses} classes · {room.totalBatches} batches
+                    </p>
+                  </div>
+                  <Badge variant="outline">{room.entries.filter((entry) => entry.deliveryMode === "ONLINE").length} online-linked</Badge>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {room.entries.slice(0, 8).map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className="rounded-2xl border px-3 py-3 text-left transition hover:border-primary/40 hover:bg-muted/40"
+                      onClick={() => setSelectedItem(entry)}
+                    >
+                      <p className="text-sm font-medium">{entry.dayOfWeek.slice(0, 3)} · {entry.startTime}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{entry.subjectCode} · {entry.batchCode}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{entry.teacherName ?? "Teacher pending"}</p>
+                    </button>
+                  ))}
+                </div>
+                {room.entries.length > 8 ? (
+                  <p className="mt-3 text-xs text-muted-foreground">+{room.entries.length - 8} more classes in this space</p>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground xl:col-span-2">
+              No room utilization data is available in the current scope.
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {viewMode === "table" ? (
+        <DataTable
+          data={items}
+          columns={columns}
+          pageCount={Math.ceil(query.data.total / query.data.limit)}
+          pagination={{ pageIndex, pageSize: query.data.limit }}
+          onPaginationChange={(state) => setPageIndex(state.pageIndex)}
+        />
+      ) : null}
       <Dialog open={Boolean(selectedItem)} onOpenChange={(nextOpen) => !nextOpen && setSelectedItem(null)}>
         <DialogContent>
           <DialogHeader>

@@ -416,7 +416,7 @@ export interface Student {
 }
 
 export interface StudentDetail extends Student {
-  academicSummary: {
+  academicSummary?: {
     publishedResults: number;
     latestPercentage: number | null;
     latestGrade: string | null;
@@ -444,7 +444,7 @@ export interface StudentDetail extends Student {
       room: string | null;
       batchName: string;
     }>;
-  };
+  } | null;
 }
 
 export interface StudentDocument {

@@ -383,6 +383,18 @@ export default function ReportsPage() {
     }
     return Array.from(byMonth.values());
   }, [organizationsQuery.data]);
+  const moduleAdoption = useMemo(() => {
+    const items = organizationsQuery.data?.items ?? [];
+    const byModule = new Map<string, number>();
+    for (const organization of items) {
+      for (const moduleName of organization.enabledModules) {
+        byModule.set(moduleName, (byModule.get(moduleName) ?? 0) + 1);
+      }
+    }
+    return Array.from(byModule.entries())
+      .sort((left, right) => right[1] - left[1])
+      .map(([moduleName, total]) => ({ moduleName: moduleName.replaceAll("_", " "), total }));
+  }, [organizationsQuery.data]);
 
   return (
     <div className="space-y-6">
@@ -530,6 +542,21 @@ export default function ReportsPage() {
           </div>
         </div>
       ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-4">
+        <Button variant="outline" asChild>
+          <Link href="/fees?status=OVERDUE">Drill into overdue fees</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/fees?status=PENDING">Drill into pending fees</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/students">Drill into students</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/attendance">Drill into attendance</Link>
+        </Button>
+      </div>
       <div className="grid gap-6 2xl:grid-cols-2">
         <ChartCard
           title="Collection performance by period"
@@ -972,6 +999,25 @@ export default function ReportsPage() {
             />
           </ChartCard>
         </div>
+      ) : null}
+      {isSuperAdmin && moduleAdoption.length ? (
+        <ChartCard title="Module adoption by organization" description="Which SaaS modules are enabled most often across the tenant base.">
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={moduleAdoption.slice(0, 8)} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" />
+                <YAxis type="category" dataKey="moduleName" width={130} />
+                <Tooltip />
+                <Bar dataKey="total" radius={[0, 10, 10, 0]}>
+                  {moduleAdoption.slice(0, 8).map((item, index) => (
+                    <Cell key={item.moduleName} fill={getChartColor(index)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
       ) : null}
     </div>
   );

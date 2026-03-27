@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
 import type { ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -135,15 +134,13 @@ export default function StudentDetailPage() {
   const recentAttendanceRows = studentAttendance.slice(0, 7);
   const recentReminderRows = studentReminders.slice(0, 5);
 
-  const reminderStats = useMemo(
-    () => ({
-      sent: studentReminders.filter((record) => record.status === "SENT").length,
-      failed: studentReminders.filter((record) => record.status === "FAILED").length,
-      total: studentReminders.length,
-    }),
-    [studentReminders],
-  );
-  const recentAcademicResults = student.academicSummary.recentResults;
+  const reminderStats = {
+    sent: studentReminders.filter((record) => record.status === "SENT").length,
+    failed: studentReminders.filter((record) => record.status === "FAILED").length,
+    total: studentReminders.length,
+  };
+  const academicSummary = student.academicSummary;
+  const recentAcademicResults = academicSummary?.recentResults ?? [];
   const latestAcademicResult = recentAcademicResults[0] ?? null;
   const subjectRadar = latestAcademicResult
     ? latestAcademicResult.items.map((item: (typeof latestAcademicResult.items)[number]) => ({
@@ -169,6 +166,22 @@ export default function StudentDetailPage() {
         max: resultPercentages[resultPercentages.length - 1],
       }
     : null;
+  const latestPercentage = academicSummary?.latestPercentage ?? latestAcademicResult?.percentage ?? null;
+  const riskSignals = [
+    pendingFee > 0 ? 30 : 0,
+    attendanceRate < 75 ? 25 : attendanceRate < 85 ? 10 : 0,
+    latestPercentage !== null && latestPercentage < 60 ? 25 : latestPercentage !== null && latestPercentage < 75 ? 10 : 0,
+    reminderStats.failed > 0 || reminderStats.total >= 3 ? 20 : reminderStats.total >= 1 ? 10 : 0,
+  ];
+  const riskScore = Math.min(riskSignals.reduce((sum, value) => sum + value, 0), 100);
+  const riskLevel = riskScore >= 70 ? "High risk" : riskScore >= 40 ? "Watchlist" : "Stable";
+  const riskTone = riskScore >= 70 ? "rose" : riskScore >= 40 ? "amber" : "emerald";
+  const riskReasons = [
+    pendingFee > 0 ? `Pending fee ${formatCurrency(pendingFee)}` : null,
+    attendanceRate < 85 ? `Attendance ${attendanceRate}%` : null,
+    latestPercentage !== null && latestPercentage < 75 ? `Academic average ${latestPercentage}%` : null,
+    reminderStats.total >= 3 ? `${reminderStats.total} reminder attempts` : null,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="space-y-6">
@@ -215,6 +228,13 @@ export default function StudentDetailPage() {
           helper={canReadReminders ? `${reminderStats.sent} sent, ${reminderStats.failed} failed` : "Reminder access not available"}
           icon={BellRing}
           tone="violet"
+        />
+        <MetricCard
+          title="Student risk"
+          value={`${riskScore}/100`}
+          helper={riskLevel}
+          icon={ShieldAlert}
+          tone={riskTone}
         />
       </div>
 
@@ -275,7 +295,7 @@ export default function StudentDetailPage() {
         </ChartCard>
       </div>
 
-      <div className="grid gap-6 2xl:grid-cols-3">
+      <div className="grid gap-6 2xl:grid-cols-4">
         <Card>
           <CardHeader>
             <CardTitle>Fee summary</CardTitle>
@@ -330,6 +350,30 @@ export default function StudentDetailPage() {
               </>
             ) : (
               <EmptyBlock message="Reminder history is unavailable for your current access level." />
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Risk overview</CardTitle>
+            <CardDescription>Quick operational indicator built from fee, attendance, academic, and reminder signals.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <SummaryRow label="Risk level" value={riskLevel} />
+            <SummaryRow label="Risk score" value={`${riskScore}/100`} />
+            {riskReasons.length ? (
+              <div className="rounded-2xl border bg-muted/30 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Signals</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {riskReasons.map((reason) => (
+                    <Badge key={reason} variant="outline">
+                      {reason}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <EmptyBlock message="No current risk signals are active for this student." />
             )}
           </CardContent>
         </Card>

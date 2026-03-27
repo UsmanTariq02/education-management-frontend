@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ClipboardCheck, Gauge, GraduationCap, Trophy } from "lucide-react";
+import { ClipboardCheck, Gauge, GraduationCap, LayoutGrid, Rows3, Table2, Trophy } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -38,6 +38,7 @@ export default function ExamResultsPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
+  const [viewMode, setViewMode] = useState<"table" | "students" | "subjects" | "insights">("students");
   const [pageIndex, setPageIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const [editingResult, setEditingResult] = useState<ExamResult | null>(null);
@@ -139,6 +140,102 @@ export default function ExamResultsPage() {
       ).map(([grade, total]) => ({ grade, total })),
     [results],
   );
+  const studentCards = useMemo(
+    () =>
+      results
+        .slice()
+        .sort((left, right) => right.percentage - left.percentage)
+        .map((result) => ({
+          ...result,
+          strongSubjects: result.items.filter((item) => item.obtainedMarks / item.totalMarks >= 0.75).length,
+          weakSubjects: result.items.filter((item) => item.obtainedMarks < item.passMarks).length,
+        })),
+    [results],
+  );
+  const subjectMatrix = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        subjectName: string;
+        subjectCode: string;
+        attempts: number;
+        average: number;
+        passCount: number;
+        highest: number;
+        lowest: number;
+      }
+    >();
+
+    for (const result of results) {
+      for (const item of result.items) {
+        const current = map.get(item.subjectId) ?? {
+          subjectName: item.subjectName,
+          subjectCode: item.subjectCode,
+          attempts: 0,
+          average: 0,
+          passCount: 0,
+          highest: 0,
+          lowest: 100,
+        };
+        const percentage = item.totalMarks ? Math.round((item.obtainedMarks / item.totalMarks) * 100) : 0;
+        current.attempts += 1;
+        current.average += percentage;
+        current.highest = Math.max(current.highest, percentage);
+        current.lowest = Math.min(current.lowest, percentage);
+        if (item.obtainedMarks >= item.passMarks) {
+          current.passCount += 1;
+        }
+        map.set(item.subjectId, current);
+      }
+    }
+
+    return Array.from(map.values())
+      .map((item) => ({
+        ...item,
+        average: item.attempts ? Math.round(item.average / item.attempts) : 0,
+        passRate: item.attempts ? Math.round((item.passCount / item.attempts) * 100) : 0,
+      }))
+      .sort((left, right) => right.average - left.average);
+  }, [results]);
+  const examInsights = useMemo(() => {
+    const byExam = new Map<
+      string,
+      {
+        examName: string;
+        examCode: string;
+        count: number;
+        average: number;
+        published: number;
+        topScore: number;
+      }
+    >();
+
+    for (const result of results) {
+      const current = byExam.get(result.examId) ?? {
+        examName: result.examName,
+        examCode: result.examCode,
+        count: 0,
+        average: 0,
+        published: 0,
+        topScore: 0,
+      };
+      current.count += 1;
+      current.average += result.percentage;
+      current.topScore = Math.max(current.topScore, result.percentage);
+      if (result.status === "PUBLISHED") {
+        current.published += 1;
+      }
+      byExam.set(result.examId, current);
+    }
+
+    return Array.from(byExam.values())
+      .map((item) => ({
+        ...item,
+        average: item.count ? Math.round(item.average / item.count) : 0,
+        publishRate: item.count ? Math.round((item.published / item.count) * 100) : 0,
+      }))
+      .sort((left, right) => right.average - left.average);
+  }, [results]);
 
   const columns = useMemo<Array<ColumnDef<ExamResult>>>(
     () => [
@@ -392,13 +489,169 @@ export default function ExamResultsPage() {
           ) : null
         }
       />
-      <DataTable
-        data={results}
-        columns={columns}
-        pageCount={Math.ceil(resultsQuery.data.total / resultsQuery.data.limit)}
-        pagination={{ pageIndex, pageSize: resultsQuery.data.limit }}
-        onPaginationChange={(state) => setPageIndex(state.pageIndex)}
-      />
+      <div className="flex flex-wrap gap-2">
+        <Button variant={viewMode === "students" ? "default" : "outline"} size="sm" onClick={() => setViewMode("students")}>
+          <LayoutGrid className="mr-2 h-4 w-4" />
+          Student cards
+        </Button>
+        <Button variant={viewMode === "subjects" ? "default" : "outline"} size="sm" onClick={() => setViewMode("subjects")}>
+          <Table2 className="mr-2 h-4 w-4" />
+          Subject matrix
+        </Button>
+        <Button variant={viewMode === "insights" ? "default" : "outline"} size="sm" onClick={() => setViewMode("insights")}>
+          <Gauge className="mr-2 h-4 w-4" />
+          Exam insights
+        </Button>
+        <Button variant={viewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setViewMode("table")}>
+          <Rows3 className="mr-2 h-4 w-4" />
+          Table view
+        </Button>
+      </div>
+
+      {viewMode === "students" ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {studentCards.length ? (
+            studentCards.map((result) => (
+              <button
+                key={result.id}
+                type="button"
+                className="rounded-3xl border bg-card p-5 text-left transition hover:border-primary/40 hover:bg-muted/30"
+                onClick={() => setSelectedResult(result)}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-lg font-semibold">{result.studentName}</p>
+                    <p className="text-sm text-muted-foreground">{result.examName} · {result.batchName}</p>
+                  </div>
+                  <Badge variant={result.status === "PUBLISHED" ? "success" : "warning"}>{result.status}</Badge>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Score</p>
+                    <p className="mt-2 text-xl font-semibold">{result.percentage}%</p>
+                    <p className="text-xs text-muted-foreground">{result.grade ?? "No grade"}</p>
+                  </div>
+                  <div className="rounded-2xl border p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Strong subjects</p>
+                    <p className="mt-2 text-xl font-semibold">{result.strongSubjects}</p>
+                    <p className="text-xs text-muted-foreground">75%+ performance</p>
+                  </div>
+                  <div className="rounded-2xl border p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">At-risk subjects</p>
+                    <p className="mt-2 text-xl font-semibold">{result.weakSubjects}</p>
+                    <p className="text-xs text-muted-foreground">Below pass threshold</p>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {result.items.slice(0, 4).map((item) => {
+                    const percentage = item.totalMarks ? Math.round((item.obtainedMarks / item.totalMarks) * 100) : 0;
+                    return (
+                      <div key={item.id} className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span>{item.subjectCode}</span>
+                          <span>{item.obtainedMarks}/{item.totalMarks}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-muted">
+                          <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(percentage, 100)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground xl:col-span-2">
+              No result cards are available in the current scope.
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {viewMode === "subjects" ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {subjectMatrix.length ? (
+            subjectMatrix.map((subject) => (
+              <div key={subject.subjectCode} className="rounded-3xl border bg-card p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-lg font-semibold">{subject.subjectName}</p>
+                    <p className="text-sm text-muted-foreground">{subject.subjectCode} · {subject.attempts} scripts reviewed</p>
+                  </div>
+                  <Badge variant="outline">{subject.passRate}% pass rate</Badge>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Average</p>
+                    <p className="mt-2 text-xl font-semibold">{subject.average}%</p>
+                  </div>
+                  <div className="rounded-2xl border p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Highest</p>
+                    <p className="mt-2 text-xl font-semibold">{subject.highest}%</p>
+                  </div>
+                  <div className="rounded-2xl border p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Lowest</p>
+                    <p className="mt-2 text-xl font-semibold">{subject.lowest}%</p>
+                  </div>
+                </div>
+                <div className="mt-4 h-2 rounded-full bg-muted">
+                  <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(subject.average, 100)}%` }} />
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground xl:col-span-2">
+              Subject-wise insight will appear once result items are available.
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {viewMode === "insights" ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {examInsights.length ? (
+            examInsights.map((exam) => (
+              <div key={exam.examCode} className="rounded-3xl border bg-card p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-lg font-semibold">{exam.examName}</p>
+                    <p className="text-sm text-muted-foreground">{exam.examCode} · {exam.count} result records</p>
+                  </div>
+                  <Badge variant="outline">{exam.publishRate}% published</Badge>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Average</p>
+                    <p className="mt-2 text-xl font-semibold">{exam.average}%</p>
+                  </div>
+                  <div className="rounded-2xl border p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Top score</p>
+                    <p className="mt-2 text-xl font-semibold">{exam.topScore}%</p>
+                  </div>
+                  <div className="rounded-2xl border p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Published</p>
+                    <p className="mt-2 text-xl font-semibold">{exam.published}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-3xl border border-dashed p-8 text-center text-sm text-muted-foreground xl:col-span-2">
+              Exam insights will appear once results are created for one or more exams.
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {viewMode === "table" ? (
+        <DataTable
+          data={results}
+          columns={columns}
+          pageCount={Math.ceil(resultsQuery.data.total / resultsQuery.data.limit)}
+          pagination={{ pageIndex, pageSize: resultsQuery.data.limit }}
+          onPaginationChange={(state) => setPageIndex(state.pageIndex)}
+        />
+      ) : null}
       <Dialog open={Boolean(selectedResult)} onOpenChange={(nextOpen) => !nextOpen && setSelectedResult(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
