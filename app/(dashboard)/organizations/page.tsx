@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Building2, ShieldCheck, Users, UserSquare2 } from "lucide-react";
+import { Building2, Clock3, ReceiptText, ShieldCheck, Users, UserSquare2 } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -27,7 +27,7 @@ import { organizationSchema, type OrganizationSchema } from "@/features/organiza
 import { normalizeApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/formatters";
 import { useAuth } from "@/providers/auth-provider";
-import type { Organization } from "@/types/domain";
+import type { Organization, OrganizationBillingEntry } from "@/types/domain";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 const organizationModules = [
@@ -45,22 +45,45 @@ const organizationModules = [
   "MEDIA",
 ] as const;
 
+const subscriptionStatuses = ["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED", "CANCELLED"] as const;
+const billingEntryTypes = ["SUBSCRIPTION", "TRIAL_EXTENSION", "ADJUSTMENT", "MANUAL_INVOICE"] as const;
+const billingEntryStatuses = ["OPEN", "PAID", "VOID"] as const;
+
 export default function OrganizationsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [subscriptionFilter, setSubscriptionFilter] = useState("ALL");
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 12;
   const [open, setOpen] = useState(false);
   const [editingOrganization, setEditingOrganization] = useState<Organization | null>(null);
   const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(null);
+  const [billingOpen, setBillingOpen] = useState(false);
+  const [billingForm, setBillingForm] = useState({
+    type: "MANUAL_INVOICE",
+    status: "OPEN",
+    title: "",
+    description: "",
+    amount: 0,
+    currency: "USD",
+    dueDate: "",
+    entryDate: "",
+    periodStart: "",
+    periodEnd: "",
+  });
 
   const organizationsQuery = useQuery({
     queryKey: ["organizations", debouncedSearch, pageIndex, pageSize],
     queryFn: () => organizationsApi.list({ page: pageIndex + 1, limit: pageSize, search: debouncedSearch }),
     enabled: user?.roles.includes("SUPER_ADMIN") ?? false,
+  });
+  const billingEntriesQuery = useQuery({
+    queryKey: ["organizations", selectedOrganization?.id, "billing-entries"],
+    queryFn: () => organizationsApi.billingEntries(selectedOrganization!.id),
+    enabled: Boolean(selectedOrganization?.id),
   });
 
   const form = useForm<OrganizationSchema>({
@@ -72,6 +95,13 @@ export default function OrganizationsPage() {
       phone: "",
       address: "",
       isActive: true,
+      subscriptionStatus: "TRIAL",
+      trialDays: 14,
+      trialStartsAt: "",
+      trialEndsAt: "",
+      subscriptionStartsAt: "",
+      subscriptionEndsAt: "",
+      subscriptionNotes: "",
       userLimit: 10,
       studentLimit: 500,
       enabledModules: [...organizationModules],
@@ -85,6 +115,11 @@ export default function OrganizationsPage() {
         email: values.email || undefined,
         phone: values.phone || undefined,
         address: values.address || undefined,
+        trialStartsAt: values.trialStartsAt || undefined,
+        trialEndsAt: values.trialEndsAt || undefined,
+        subscriptionStartsAt: values.subscriptionStartsAt || undefined,
+        subscriptionEndsAt: values.subscriptionEndsAt || undefined,
+        subscriptionNotes: values.subscriptionNotes || undefined,
       };
 
       if (editingOrganization) {
@@ -102,20 +137,58 @@ export default function OrganizationsPage() {
     },
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
+  const billingMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedOrganization) {
+        throw new Error("Organization is required");
+      }
+      return organizationsApi.createBillingEntry(selectedOrganization.id, {
+        type: billingForm.type as "SUBSCRIPTION" | "TRIAL_EXTENSION" | "ADJUSTMENT" | "MANUAL_INVOICE",
+        status: billingForm.status as "OPEN" | "PAID" | "VOID",
+        title: billingForm.title,
+        description: billingForm.description || undefined,
+        amount: Number(billingForm.amount),
+        currency: billingForm.currency || "USD",
+        dueDate: billingForm.dueDate || undefined,
+        entryDate: billingForm.entryDate || undefined,
+        periodStart: billingForm.periodStart || undefined,
+        periodEnd: billingForm.periodEnd || undefined,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Billing entry added");
+      queryClient.invalidateQueries({ queryKey: ["organizations", selectedOrganization?.id, "billing-entries"] });
+      setBillingOpen(false);
+      setBillingForm({
+        type: "MANUAL_INVOICE",
+        status: "OPEN",
+        title: "",
+        description: "",
+        amount: 0,
+        currency: "USD",
+        dueDate: "",
+        entryDate: "",
+        periodStart: "",
+        periodEnd: "",
+      });
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
 
   const filteredOrganizations = useMemo(() => {
     const items = organizationsQuery.data?.items ?? [];
 
     return items.filter((item) => {
       if (statusFilter === "ALL") {
-        return true;
+        return subscriptionFilter === "ALL" ? true : item.subscriptionStatus === subscriptionFilter;
       }
-
-      return statusFilter === "ACTIVE" ? item.isActive : !item.isActive;
+      const matchesStatus = statusFilter === "ACTIVE" ? item.isActive : !item.isActive;
+      const matchesSubscription = subscriptionFilter === "ALL" ? true : item.subscriptionStatus === subscriptionFilter;
+      return matchesStatus && matchesSubscription;
     });
-  }, [organizationsQuery.data, statusFilter]);
+  }, [organizationsQuery.data, statusFilter, subscriptionFilter]);
 
-  const hasLocalFilters = statusFilter !== "ALL";
+  const hasLocalFilters = statusFilter !== "ALL" || subscriptionFilter !== "ALL";
 
   const organizationStats = useMemo(() => {
     const items = filteredOrganizations;
@@ -125,6 +198,13 @@ export default function OrganizationsPage() {
       totalAdmins: items.reduce((sum, item) => sum + item.totalAdmins, 0),
       totalStudents: items.reduce((sum, item) => sum + item.totalStudents, 0),
       totalUsers: items.reduce((sum, item) => sum + item.totalUsers, 0),
+      activeSubscriptions: items.filter((item) => item.subscriptionStatus === "ACTIVE").length,
+      trials: items.filter((item) => item.subscriptionStatus === "TRIAL").length,
+      expiringTrials: items.filter((item) => {
+        if (item.subscriptionStatus !== "TRIAL" || !item.trialEndsAt) return false;
+        const diff = new Date(item.trialEndsAt).getTime() - Date.now();
+        return diff >= 0 && diff <= 7 * 24 * 60 * 60 * 1000;
+      }).length,
     };
   }, [filteredOrganizations]);
 
@@ -162,6 +242,9 @@ export default function OrganizationsPage() {
             <p className="text-xs text-muted-foreground">
               Limits: {row.original.totalUsers}/{row.original.userLimit} users · {row.original.totalStudents}/{row.original.studentLimit} students
             </p>
+            <p className="text-xs text-muted-foreground">
+              Billing: {row.original.subscriptionStatus.replaceAll("_", " ")} · trial {row.original.trialDays} days
+            </p>
           </div>
         ),
       },
@@ -179,7 +262,12 @@ export default function OrganizationsPage() {
       {
         accessorKey: "isActive",
         header: "Status",
-        cell: ({ row }) => <Badge variant={row.original.isActive ? "success" : "warning"}>{row.original.isActive ? "Active" : "Inactive"}</Badge>,
+        cell: ({ row }) => (
+          <div className="flex flex-col gap-1">
+            <Badge variant={row.original.isActive ? "success" : "warning"}>{row.original.isActive ? "Active" : "Inactive"}</Badge>
+            <Badge variant="outline">{row.original.subscriptionStatus.replaceAll("_", " ")}</Badge>
+          </div>
+        ),
       },
       {
         accessorKey: "createdAt",
@@ -206,6 +294,13 @@ export default function OrganizationsPage() {
                   phone: row.original.phone ?? "",
                   address: row.original.address ?? "",
                   isActive: row.original.isActive,
+                  subscriptionStatus: row.original.subscriptionStatus,
+                  trialDays: row.original.trialDays,
+                  trialStartsAt: row.original.trialStartsAt ? row.original.trialStartsAt.slice(0, 10) : "",
+                  trialEndsAt: row.original.trialEndsAt ? row.original.trialEndsAt.slice(0, 10) : "",
+                  subscriptionStartsAt: row.original.subscriptionStartsAt ? row.original.subscriptionStartsAt.slice(0, 10) : "",
+                  subscriptionEndsAt: row.original.subscriptionEndsAt ? row.original.subscriptionEndsAt.slice(0, 10) : "",
+                  subscriptionNotes: row.original.subscriptionNotes ?? "",
                   userLimit: row.original.userLimit,
                   studentLimit: row.original.studentLimit,
                   enabledModules: row.original.enabledModules,
@@ -249,17 +344,33 @@ export default function OrganizationsPage() {
         }}
         searchPlaceholder="Search organizations by name, slug, or contact..."
         filters={
-          <NativeSelect
-            value={statusFilter}
-            onChange={(event) => {
-              setStatusFilter(event.target.value);
-              setPageIndex(0);
-            }}
-          >
-            <option value="ALL">All statuses</option>
-            <option value="ACTIVE">Active only</option>
-            <option value="INACTIVE">Inactive only</option>
-          </NativeSelect>
+          <>
+            <NativeSelect
+              value={statusFilter}
+              onChange={(event) => {
+                setStatusFilter(event.target.value);
+                setPageIndex(0);
+              }}
+            >
+              <option value="ALL">All statuses</option>
+              <option value="ACTIVE">Active only</option>
+              <option value="INACTIVE">Inactive only</option>
+            </NativeSelect>
+            <NativeSelect
+              value={subscriptionFilter}
+              onChange={(event) => {
+                setSubscriptionFilter(event.target.value);
+                setPageIndex(0);
+              }}
+            >
+              <option value="ALL">All billing states</option>
+              {subscriptionStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {status.replaceAll("_", " ")}
+                </option>
+              ))}
+            </NativeSelect>
+          </>
         }
         action={
           <Dialog
@@ -298,6 +409,33 @@ export default function OrganizationsPage() {
                 </FormField>
                 <FormField label="Student limit" required error={form.formState.errors.studentLimit}>
                   <Input type="number" min={1} {...form.register("studentLimit", { valueAsNumber: true })} />
+                </FormField>
+                <FormField label="Subscription status" required error={form.formState.errors.subscriptionStatus}>
+                  <NativeSelect {...form.register("subscriptionStatus")}>
+                    {subscriptionStatuses.map((status) => (
+                      <option key={status} value={status}>
+                        {status.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </FormField>
+                <FormField label="Trial days" required error={form.formState.errors.trialDays}>
+                  <Input type="number" min={0} {...form.register("trialDays", { valueAsNumber: true })} />
+                </FormField>
+                <FormField label="Trial starts on" error={form.formState.errors.trialStartsAt}>
+                  <Input type="date" {...form.register("trialStartsAt")} />
+                </FormField>
+                <FormField label="Trial ends on" error={form.formState.errors.trialEndsAt}>
+                  <Input type="date" {...form.register("trialEndsAt")} />
+                </FormField>
+                <FormField label="Subscription starts on" error={form.formState.errors.subscriptionStartsAt}>
+                  <Input type="date" {...form.register("subscriptionStartsAt")} />
+                </FormField>
+                <FormField label="Subscription ends on" error={form.formState.errors.subscriptionEndsAt}>
+                  <Input type="date" {...form.register("subscriptionEndsAt")} />
+                </FormField>
+                <FormField label="Billing notes" className="md:col-span-2" error={form.formState.errors.subscriptionNotes}>
+                  <Textarea rows={3} {...form.register("subscriptionNotes")} />
                 </FormField>
                 <FormField label="Address" className="md:col-span-2" error={form.formState.errors.address}>
                   <Textarea rows={4} {...form.register("address")} />
@@ -339,11 +477,13 @@ export default function OrganizationsPage() {
           </Dialog>
         }
       />
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <MetricCard title="Organizations" value={String(organizationStats.totalOrganizations)} helper="Total onboarded institutions" icon={Building2} tone="sky" />
         <MetricCard title="Admins" value={String(organizationStats.totalAdmins)} helper="Tenant admins across all organizations" icon={ShieldCheck} tone="violet" />
         <MetricCard title="Users" value={String(organizationStats.totalUsers)} helper="Organization-scoped platform users" icon={Users} tone="emerald" />
         <MetricCard title="Students" value={String(organizationStats.totalStudents)} helper="Students across onboarded organizations" icon={UserSquare2} tone="amber" />
+        <MetricCard title="Active billing" value={String(organizationStats.activeSubscriptions)} helper="Organizations on active subscription" icon={ShieldCheck} tone="emerald" />
+        <MetricCard title="Trials expiring" value={String(organizationStats.expiringTrials)} helper={`${organizationStats.trials} total trial organizations`} icon={Clock3} tone="amber" />
       </div>
       <DataTable
         data={filteredOrganizations}
@@ -368,10 +508,20 @@ export default function OrganizationsPage() {
                 <DetailItem label="Organization" value={selectedOrganization.name} />
                 <DetailItem label="Slug" value={selectedOrganization.slug} />
                 <DetailItem label="Status" value={`${selectedOrganization.isActive ? "Active" : "Inactive"} · Onboarded ${formatDate(selectedOrganization.createdAt)}`} />
+                <DetailItem label="Billing status" value={selectedOrganization.subscriptionStatus.replaceAll("_", " ")} />
                 <DetailItem label="Contact" value={`${selectedOrganization.email ?? "No email"} · ${selectedOrganization.phone ?? "No phone"}`} />
                 <DetailItem label="Users capacity" value={`${selectedOrganization.totalUsers}/${selectedOrganization.userLimit}`} />
                 <DetailItem label="Students capacity" value={`${selectedOrganization.totalStudents}/${selectedOrganization.studentLimit}`} />
+                <DetailItem
+                  label="Trial window"
+                  value={`${selectedOrganization.trialDays} days · ${formatDate(selectedOrganization.trialStartsAt)} to ${formatDate(selectedOrganization.trialEndsAt)}`}
+                />
+                <DetailItem
+                  label="Subscription term"
+                  value={`${formatDate(selectedOrganization.subscriptionStartsAt)} to ${formatDate(selectedOrganization.subscriptionEndsAt)}`}
+                />
                 <DetailItem label="Address" value={selectedOrganization.address ?? "No address recorded"} className="md:col-span-2" />
+                <DetailItem label="Billing notes" value={selectedOrganization.subscriptionNotes ?? "No notes recorded"} className="md:col-span-2" />
               </div>
               <div className="rounded-2xl border p-4">
                 <p className="text-sm font-medium">Tenant summary</p>
@@ -394,6 +544,112 @@ export default function OrganizationsPage() {
                       {module.replaceAll("_", " ")}
                     </Badge>
                   ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-medium">Billing ledger</p>
+                  <Dialog open={billingOpen} onOpenChange={setBillingOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm">
+                        <ReceiptText className="mr-2 h-4 w-4" />
+                        Add billing entry
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>Add billing entry</DialogTitle>
+                        <DialogDescription>Record a manual invoice, trial extension, subscription charge, or adjustment for this organization.</DialogDescription>
+                      </DialogHeader>
+                      <form
+                        className="grid gap-4 md:grid-cols-2"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          billingMutation.mutate();
+                        }}
+                      >
+                        <FormField label="Entry type" required>
+                          <NativeSelect value={billingForm.type} onChange={(event) => setBillingForm((current) => ({ ...current, type: event.target.value }))}>
+                            {billingEntryTypes.map((type) => (
+                              <option key={type} value={type}>
+                                {type.replaceAll("_", " ")}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        </FormField>
+                        <FormField label="Status" required>
+                          <NativeSelect value={billingForm.status} onChange={(event) => setBillingForm((current) => ({ ...current, status: event.target.value }))}>
+                            {billingEntryStatuses.map((status) => (
+                              <option key={status} value={status}>
+                                {status.replaceAll("_", " ")}
+                              </option>
+                            ))}
+                          </NativeSelect>
+                        </FormField>
+                        <FormField label="Title" required className="md:col-span-2">
+                          <Input value={billingForm.title} onChange={(event) => setBillingForm((current) => ({ ...current, title: event.target.value }))} />
+                        </FormField>
+                        <FormField label="Amount" required>
+                          <Input type="number" min={0} value={billingForm.amount} onChange={(event) => setBillingForm((current) => ({ ...current, amount: Number(event.target.value) }))} />
+                        </FormField>
+                        <FormField label="Currency" required>
+                          <Input value={billingForm.currency} onChange={(event) => setBillingForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
+                        </FormField>
+                        <FormField label="Entry date">
+                          <Input type="date" value={billingForm.entryDate} onChange={(event) => setBillingForm((current) => ({ ...current, entryDate: event.target.value }))} />
+                        </FormField>
+                        <FormField label="Due date">
+                          <Input type="date" value={billingForm.dueDate} onChange={(event) => setBillingForm((current) => ({ ...current, dueDate: event.target.value }))} />
+                        </FormField>
+                        <FormField label="Period start">
+                          <Input type="date" value={billingForm.periodStart} onChange={(event) => setBillingForm((current) => ({ ...current, periodStart: event.target.value }))} />
+                        </FormField>
+                        <FormField label="Period end">
+                          <Input type="date" value={billingForm.periodEnd} onChange={(event) => setBillingForm((current) => ({ ...current, periodEnd: event.target.value }))} />
+                        </FormField>
+                        <FormField label="Description" className="md:col-span-2">
+                          <Textarea rows={3} value={billingForm.description} onChange={(event) => setBillingForm((current) => ({ ...current, description: event.target.value }))} />
+                        </FormField>
+                        <div className="md:col-span-2 flex justify-end gap-2">
+                          <Button type="button" variant="outline" onClick={() => setBillingOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={billingMutation.isPending || !billingForm.title}>
+                            {billingMutation.isPending ? "Saving..." : "Add entry"}
+                          </Button>
+                        </div>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {billingEntriesQuery.data?.length ? (
+                    billingEntriesQuery.data.map((entry: OrganizationBillingEntry) => (
+                      <div key={entry.id} className="rounded-2xl border p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium">{entry.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {entry.type.replaceAll("_", " ")} · {formatDate(entry.entryDate)}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge variant="outline">{entry.status}</Badge>
+                            <span className="text-sm font-medium">{entry.currency} {entry.amount}</span>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                          <p>Due: {formatDate(entry.dueDate)}</p>
+                          <p>Period: {formatDate(entry.periodStart)} to {formatDate(entry.periodEnd)}</p>
+                          <p>Users snapshot: {entry.userCountSnapshot ?? "N/A"}</p>
+                          <p>Modules snapshot: {entry.moduleCountSnapshot ?? "N/A"}</p>
+                        </div>
+                        {entry.description ? <p className="mt-3 text-sm text-muted-foreground">{entry.description}</p> : null}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No billing entries recorded yet for this organization.</p>
+                  )}
                 </div>
               </div>
             </div>

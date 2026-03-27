@@ -75,16 +75,16 @@ const deploymentFits = [
 export default function LandingPage() {
   return (
     <LandingLoader>
-    <main>
+    <main className="bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.08),_transparent_24%),linear-gradient(180deg,_hsl(var(--background))_0%,_hsl(var(--muted)/0.32)_100%)]">
       <section className="container grid gap-10 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
         <div className="space-y-8">
-          <Badge>Built for schools, academies, and institutes</Badge>
+          <Badge className="border-sky-500/20 bg-sky-500/10 text-sky-700 hover:bg-sky-500/10">Built for schools, academies, and institutes</Badge>
           <div className="space-y-5">
             <h1 className="max-w-4xl text-5xl font-semibold tracking-tight md:text-6xl">
-              Run education operations with fewer spreadsheets and more control.
+              Run education operations, academics, portals, and online classes from one system.
             </h1>
             <p className="max-w-2xl text-lg text-muted-foreground">
-              EduFlow unifies student records, batches, fee collection, attendance, reminders, reporting, and access control in one operational system.
+              EduFlow unifies student records, fee operations, attendance, teachers, timetables, exams, portals, online classes, and reporting in one operational platform.
             </p>
           </div>
           <div className="flex flex-wrap gap-4">
@@ -119,7 +119,7 @@ export default function LandingPage() {
             </Card>
           </div>
         </div>
-        <Card className="overflow-hidden border-slate-200 bg-slate-950 text-slate-50">
+        <Card className="overflow-hidden border-slate-200 bg-slate-950 text-slate-50 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.85)]">
           <CardContent className="p-0">
             <div className="grid gap-0 md:grid-cols-[220px_1fr]">
               <div className="border-b border-slate-800 bg-slate-900 p-5 md:border-b-0 md:border-r">
@@ -168,6 +168,22 @@ export default function LandingPage() {
             </div>
           </CardContent>
         </Card>
+      </section>
+
+      <section className="container pb-4">
+        <div className="grid gap-4 rounded-[2rem] border bg-card/80 p-6 backdrop-blur md:grid-cols-4">
+          {[
+            { title: "Academic operations", detail: "Teachers, subjects, timetables, exams, and results in one flow." },
+            { title: "Parent connectivity", detail: "Student and parent portals with fees, attendance, reminders, and results." },
+            { title: "Online learning", detail: "Scheduled online classes with attendance-linked workflows." },
+            { title: "Governed SaaS", detail: "Multi-tenant controls, modules, limits, and permission-aware access." },
+          ].map((item) => (
+            <div key={item.title} className="rounded-2xl border bg-background/70 p-4">
+              <p className="text-sm font-semibold">{item.title}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="container py-16">

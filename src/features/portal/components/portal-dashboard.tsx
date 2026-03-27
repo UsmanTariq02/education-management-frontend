@@ -54,32 +54,52 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4 rounded-3xl border bg-card p-6">
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">{audienceLabel}</p>
-          <h1 className="text-3xl font-semibold tracking-tight">{student.fullName}</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            {variant === "parent"
-              ? `Track ${student.fullName}'s fees, attendance, reminders, and published academic progress from one guardian view.`
-              : "Track your attendance, dues, timetable, reminders, and published results from one student workspace."}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{student.organizationName}</Badge>
-            {student.batches.map((batch) => (
-              <Badge key={batch.id} variant="secondary">
-                {batch.name}
-              </Badge>
-            ))}
+      <div className="relative overflow-hidden rounded-[2rem] border bg-slate-950 p-6 text-slate-50 shadow-[0_30px_80px_-45px_rgba(15,23,42,0.85)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.24),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.18),_transparent_26%)]" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">{audienceLabel}</p>
+            <h1 className="text-3xl font-semibold tracking-tight">{student.fullName}</h1>
+            <p className="max-w-2xl text-sm text-slate-300">
+              {variant === "parent"
+                ? `Track ${student.fullName}'s fees, attendance, reminders, and published academic progress from one guardian view.`
+                : "Track your attendance, dues, timetable, reminders, and published results from one student workspace."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Badge className="border-sky-400/20 bg-sky-400/10 text-sky-100 hover:bg-sky-400/10">{student.organizationName}</Badge>
+              {student.batches.map((batch) => (
+                <Badge key={batch.id} className="border-white/10 bg-white/10 text-white hover:bg-white/10">
+                  {batch.name}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild variant="secondary">
+              <Link href={guideHref}>How to use this portal</Link>
+            </Button>
+            <Button variant="outline" className="border-white/15 bg-white/5 text-white hover:bg-white/10" onClick={() => logout()}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out
+            </Button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Button asChild variant="outline">
-            <Link href={guideHref}>How to use this portal</Link>
-          </Button>
-          <Button variant="outline" onClick={() => logout()}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign out
-          </Button>
+        <div className="relative mt-6 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Pending dues</p>
+            <p className="mt-2 text-2xl font-semibold">{formatCurrency(feeSummary.pendingAmount)}</p>
+            <p className="mt-1 text-sm text-slate-300">{feeSummary.overdueCount} overdue cycles</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Attendance rate</p>
+            <p className="mt-2 text-2xl font-semibold">{attendanceSummary.attendanceRate}%</p>
+            <p className="mt-1 text-sm text-slate-300">{attendanceSummary.totalEntries} recent entries</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Published results</p>
+            <p className="mt-2 text-2xl font-semibold">{academicSummary.publishedResults}</p>
+            <p className="mt-1 text-sm text-slate-300">{academicSummary.latestGrade ? `Latest grade ${academicSummary.latestGrade}` : "No grade yet"}</p>
+          </div>
         </div>
       </div>
 

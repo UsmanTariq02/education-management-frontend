@@ -10,6 +10,13 @@ export const organizationSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().default(true),
+  subscriptionStatus: z.enum(["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED", "CANCELLED"]).default("TRIAL"),
+  trialDays: z.coerce.number().int().min(0, "Trial days cannot be negative").default(14),
+  trialStartsAt: z.string().optional(),
+  trialEndsAt: z.string().optional(),
+  subscriptionStartsAt: z.string().optional(),
+  subscriptionEndsAt: z.string().optional(),
+  subscriptionNotes: z.string().optional(),
   userLimit: z.coerce.number().int().min(1, "User limit must be at least 1").default(10),
   studentLimit: z.coerce.number().int().min(1, "Student limit must be at least 1").default(500),
   enabledModules: z.array(

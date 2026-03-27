@@ -28,6 +28,7 @@ export const endpoints = {
   organizations: {
     list: "/organizations",
     detail: (id: string) => `/organizations/${id}`,
+    billingEntries: (id: string) => `/organizations/${id}/billing-entries`,
     currentSettings: "/organization-settings/current",
   },
   organizationAssets: {

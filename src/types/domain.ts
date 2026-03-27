@@ -29,6 +29,9 @@ export type OrganizationModule =
   | "ACTIVITY_LOGS"
   | "SETTINGS"
   | "MEDIA";
+export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELLED";
+export type BillingEntryType = "SUBSCRIPTION" | "TRIAL_EXTENSION" | "ADJUSTMENT" | "MANUAL_INVOICE";
+export type BillingEntryStatus = "OPEN" | "PAID" | "VOID";
 
 export interface ActivityLogActor {
   id: string;
@@ -72,6 +75,13 @@ export interface Organization {
   phone: string | null;
   address: string | null;
   isActive: boolean;
+  subscriptionStatus: SubscriptionStatus;
+  trialDays: number;
+  trialStartsAt: string;
+  trialEndsAt: string | null;
+  subscriptionStartsAt: string | null;
+  subscriptionEndsAt: string | null;
+  subscriptionNotes: string | null;
   userLimit: number;
   studentLimit: number;
   enabledModules: OrganizationModule[];
@@ -84,6 +94,25 @@ export interface Organization {
   totalFeeRecords: number;
   totalAttendanceRecords: number;
   totalReminderLogs: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrganizationBillingEntry {
+  id: string;
+  organizationId: string;
+  type: BillingEntryType;
+  status: BillingEntryStatus;
+  title: string;
+  description: string | null;
+  amount: number;
+  currency: string;
+  dueDate: string | null;
+  entryDate: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  userCountSnapshot: number | null;
+  moduleCountSnapshot: number | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,6 +1,9 @@
 import type {
+  BillingEntryStatus,
+  BillingEntryType,
   ContactInquiryStatus,
   OrganizationModule,
+  SubscriptionStatus,
   AttendanceStatus,
   FeeRecordStatus,
   OrganizationAssetType,
@@ -59,12 +62,32 @@ export interface CreateOrganizationDto {
   phone?: string;
   address?: string;
   isActive?: boolean;
+  subscriptionStatus?: SubscriptionStatus;
+  trialDays?: number;
+  trialStartsAt?: string;
+  trialEndsAt?: string;
+  subscriptionStartsAt?: string;
+  subscriptionEndsAt?: string;
+  subscriptionNotes?: string;
   userLimit?: number;
   studentLimit?: number;
   enabledModules?: OrganizationModule[];
 }
 
 export interface UpdateOrganizationDto extends Partial<CreateOrganizationDto> {}
+
+export interface CreateOrganizationBillingEntryDto {
+  type: BillingEntryType;
+  status?: BillingEntryStatus;
+  title: string;
+  description?: string;
+  amount: number;
+  currency?: string;
+  dueDate?: string;
+  entryDate?: string;
+  periodStart?: string;
+  periodEnd?: string;
+}
 
 export interface CreateContactInquiryDto {
   fullName: string;

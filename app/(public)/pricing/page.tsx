@@ -36,7 +36,7 @@ export default function PricingPage() {
     <main className="container space-y-16 py-16">
       <section className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
         <div className="space-y-6">
-          <Badge>Pricing</Badge>
+          <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10">Pricing</Badge>
           <PageHeader
             eyebrow="Simple commercial model"
             title="$1 per module per user. Clear, modular, and easy to explain."
@@ -54,7 +54,7 @@ export default function PricingPage() {
             </Button>
           </div>
         </div>
-        <Card className="border-emerald-200 bg-emerald-50">
+        <Card className="border-emerald-200 bg-[linear-gradient(135deg,_rgba(236,253,245,1)_0%,_rgba(240,253,250,1)_55%,_rgba(255,255,255,1)_100%)] shadow-[0_25px_80px_-45px_rgba(16,185,129,0.45)]">
           <CardHeader>
             <CardTitle>Pricing formula</CardTitle>
             <CardDescription>Use one simple calculation for monthly software cost.</CardDescription>
@@ -102,12 +102,12 @@ export default function PricingPage() {
             ))}
           </CardContent>
         </Card>
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle>Illustrative pricing scenarios</CardTitle>
             <CardDescription>These examples make the pricing model easy to communicate to stakeholders.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
+          <CardContent className="grid gap-4 bg-[radial-gradient(circle_at_top_right,_rgba(14,165,233,0.1),_transparent_28%),transparent]">
             {pricingExamples.map((example) => (
               <div key={example.title} className="rounded-2xl border bg-muted/30 p-5">
                 <div className="flex items-center justify-between gap-4">

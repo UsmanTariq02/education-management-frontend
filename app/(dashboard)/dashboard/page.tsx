@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Banknote, BookOpenCheck, CalendarDays, CircleAlert, ClipboardCheck, Landmark, Presentation, Video } from "lucide-react";
+import { Banknote, BookOpenCheck, CalendarDays, CircleAlert, ClipboardCheck, Clock3, Landmark, Presentation, Video } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, BarChart, Bar, Line, LineChart, CartesianGrid, Area, AreaChart, RadarChart, PolarGrid, PolarAngleAxis, Radar, Legend } from "recharts";
 import { reportsApi } from "@/features/reports/api/reports-api";
 import { activityLogsApi } from "@/features/activity-logs/api/activity-logs-api";
@@ -525,7 +525,22 @@ export default function DashboardPage() {
       .sort((left, right) => right[1] - left[1])
       .slice(0, 5)
       .map(([moduleName, count]) => ({ moduleName, count }));
-    return { activeOrganizations, avgStudents, topModules };
+    const subscriptionMix = [
+      { name: "Trial", value: items.filter((item) => item.subscriptionStatus === "TRIAL").length },
+      { name: "Active", value: items.filter((item) => item.subscriptionStatus === "ACTIVE").length },
+      { name: "Past due", value: items.filter((item) => item.subscriptionStatus === "PAST_DUE").length },
+      { name: "Suspended", value: items.filter((item) => item.subscriptionStatus === "SUSPENDED").length },
+      { name: "Cancelled", value: items.filter((item) => item.subscriptionStatus === "CANCELLED").length },
+    ].filter((item) => item.value > 0);
+    const expiringTrials = items
+      .filter((item) => item.subscriptionStatus === "TRIAL" && item.trialEndsAt)
+      .filter((item) => {
+        const diff = new Date(item.trialEndsAt as string).getTime() - Date.now();
+        return diff >= 0 && diff <= 7 * 24 * 60 * 60 * 1000;
+      })
+      .sort((left, right) => new Date(left.trialEndsAt as string).getTime() - new Date(right.trialEndsAt as string).getTime())
+      .slice(0, 5);
+    return { activeOrganizations, avgStudents, topModules, subscriptionMix, expiringTrials };
   }, [organizationsQuery.data]);
 
   return (
@@ -683,12 +698,58 @@ export default function DashboardPage() {
             tone="violet"
           />
           <MetricCard
-            title="Top tenant growth month"
-            value={organizationGrowth[organizationGrowth.length - 1]?.month ?? "N/A"}
-            helper={organizationGrowth.length ? `${organizationGrowth[organizationGrowth.length - 1]?.organizations ?? 0} orgs onboarded` : "No growth data"}
-            icon={Banknote}
+            title="Trials expiring soon"
+            value={String(tenantInsights.expiringTrials.length)}
+            helper={tenantInsights.expiringTrials[0]?.name ? `Next: ${tenantInsights.expiringTrials[0].name}` : "No near trial expiries"}
+            icon={Clock3}
             tone="amber"
           />
+        </div>
+      ) : null}
+
+      {isSuperAdmin ? (
+        <div className="grid gap-6 xl:grid-cols-3">
+          <ChartCard title="Subscription mix" description="Trial and subscription health across onboarded organizations.">
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={tenantInsights.subscriptionMix} dataKey="value" nameKey="name" innerRadius={65} outerRadius={100}>
+                    {tenantInsights.subscriptionMix.map((item, index) => (
+                      <Cell key={item.name} fill={getChartColor(index)} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+          <Card className="xl:col-span-2">
+            <CardHeader>
+              <CardTitle>Trial watchlist</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {tenantInsights.expiringTrials.length ? (
+                tenantInsights.expiringTrials.map((organization) => (
+                  <div key={organization.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+                    <div>
+                      <p className="font-medium">{organization.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Trial ends {formatDate(organization.trialEndsAt, "MMM d, yyyy")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{organization.subscriptionStatus}</Badge>
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href="/organizations">Open billing</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <EmptyState title="No trials expiring soon" description="No trial organization is due within the next 7 days." />
+              )}
+            </CardContent>
+          </Card>
         </div>
       ) : null}
 

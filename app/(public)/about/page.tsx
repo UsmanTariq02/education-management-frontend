@@ -11,7 +11,7 @@ export default function AboutPage() {
     <main className="container space-y-16 py-16">
       <section className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
         <div className="space-y-6">
-          <Badge>About EduFlow</Badge>
+          <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-700 hover:bg-amber-500/10">About EduFlow</Badge>
           <PageHeader
             eyebrow="Multi-tenant education operations"
             title="Built for institutions that need real control over data, users, workflows, and reporting."
@@ -29,7 +29,7 @@ export default function AboutPage() {
             </Button>
           </div>
         </div>
-        <Card className="border-slate-200 bg-slate-950 text-slate-50">
+        <Card className="border-slate-200 bg-slate-950 text-slate-50 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.85)]">
           <CardHeader>
             <CardTitle>What makes the platform different</CardTitle>
             <CardDescription className="text-slate-300">
@@ -95,6 +95,21 @@ export default function AboutPage() {
               </Card>
             );
           })}
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border bg-[linear-gradient(135deg,_rgba(251,191,36,0.08)_0%,_rgba(14,165,233,0.06)_100%)] p-8">
+        <div className="grid gap-6 lg:grid-cols-3">
+          {[
+            "Administration and academics should not live in disconnected tools.",
+            "Parents and students should not depend on informal follow-up for visibility.",
+            "Management should not have to wait for manual reporting to understand operations.",
+          ].map((item, index) => (
+            <div key={item} className="rounded-2xl border bg-background/80 p-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-primary">Why it matters {index + 1}</p>
+              <p className="mt-3 text-lg font-medium">{item}</p>
+            </div>
+          ))}
         </div>
       </section>
 
