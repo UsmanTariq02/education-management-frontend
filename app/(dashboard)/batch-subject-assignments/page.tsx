@@ -21,11 +21,13 @@ import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { FormField } from "@/components/forms/form-field";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { DetailItem } from "@/components/shared/detail-item";
 import { OrganizationScopeBanner } from "@/components/shared/organization-scope-banner";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { NativeSelect } from "@/components/ui/native-select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -266,14 +268,8 @@ export default function BatchSubjectAssignmentsPage() {
                   <FormField label="Weekly classes" required error={form.formState.errors.weeklyClasses}>
                     <input className="h-10 rounded-xl border bg-background px-3 text-sm" type="number" min={1} {...form.register("weeklyClasses")} />
                   </FormField>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" {...form.register("isPrimary")} />
-                    Mark as primary subject
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" {...form.register("isActive")} />
-                    Keep assignment active
-                  </label>
+                  <Checkbox {...form.register("isPrimary")} label="Mark as primary subject" />
+                  <Checkbox {...form.register("isActive")} label="Keep assignment active" />
                   <div className="md:col-span-2 flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                       Cancel
@@ -302,14 +298,14 @@ export default function BatchSubjectAssignmentsPage() {
             <DialogDescription>Review the batch-subject mapping and its teaching ownership.</DialogDescription>
           </DialogHeader>
           {selectedItem ? (
-            <div className="space-y-3 text-sm">
-              <p><span className="font-medium">Batch:</span> {selectedItem.batchName}</p>
-              <p><span className="font-medium">Subject:</span> {selectedItem.subjectName}</p>
-              <p><span className="font-medium">Teacher:</span> {selectedItem.teacherName ?? "Unassigned"}</p>
-              <p><span className="font-medium">Session:</span> {selectedItem.academicSessionName ?? "General"}</p>
-              <p><span className="font-medium">Weekly classes:</span> {selectedItem.weeklyClasses}</p>
-              <p><span className="font-medium">Primary subject:</span> {selectedItem.isPrimary ? "Yes" : "No"}</p>
-              <p><span className="font-medium">Status:</span> {selectedItem.isActive ? "Active" : "Inactive"}</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <DetailItem label="Batch" value={selectedItem.batchName} />
+              <DetailItem label="Subject" value={selectedItem.subjectName} />
+              <DetailItem label="Teacher" value={selectedItem.teacherName ?? "Unassigned"} />
+              <DetailItem label="Session" value={selectedItem.academicSessionName ?? "General"} />
+              <DetailItem label="Weekly classes" value={String(selectedItem.weeklyClasses)} />
+              <DetailItem label="Primary subject" value={selectedItem.isPrimary ? "Yes" : "No"} />
+              <DetailItem label="Status" value={selectedItem.isActive ? "Active" : "Inactive"} className="md:col-span-2" />
             </div>
           ) : null}
         </DialogContent>

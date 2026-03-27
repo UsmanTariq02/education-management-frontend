@@ -21,6 +21,7 @@ import { MetricCard } from "@/components/cards/metric-card";
 import { ChartCard } from "@/components/charts/chart-card";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
+import { DetailItem } from "@/components/shared/detail-item";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { OrganizationScopeBanner } from "@/components/shared/organization-scope-banner";
 import { PageHeader } from "@/components/shared/page-header";
@@ -286,10 +287,10 @@ export default function ReportCardsPage() {
                         </Button>
                       </div>
                       <div className="grid gap-4 md:grid-cols-4">
-                        <div className="rounded-xl border p-3"><p className="text-xs text-muted-foreground">Student</p><p className="font-medium">{selected.studentName}</p></div>
-                        <div className="rounded-xl border p-3"><p className="text-xs text-muted-foreground">Batch</p><p className="font-medium">{selected.batchName}</p></div>
-                        <div className="rounded-xl border p-3"><p className="text-xs text-muted-foreground">Percentage</p><p className="font-medium">{selected.percentage}%</p></div>
-                        <div className="rounded-xl border p-3"><p className="text-xs text-muted-foreground">Grade</p><p className="font-medium">{selected.grade ?? "N/A"}</p></div>
+                        <DetailItem label="Student" value={selected.studentName} />
+                        <DetailItem label="Batch" value={selected.batchName} />
+                        <DetailItem label="Percentage" value={`${selected.percentage}%`} />
+                        <DetailItem label="Grade" value={selected.grade ?? "N/A"} />
                       </div>
                       <div className="overflow-hidden rounded-2xl border">
                         <table className="w-full text-sm">

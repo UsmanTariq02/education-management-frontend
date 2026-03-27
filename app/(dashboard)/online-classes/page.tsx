@@ -13,6 +13,7 @@ import { onlineClassesApi } from "@/features/online-classes/api/online-classes-a
 import { timetablesApi } from "@/features/timetables/api/timetables-api";
 import { MetricCard } from "@/components/cards/metric-card";
 import { DataTable } from "@/components/tables/data-table";
+import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { FormField } from "@/components/forms/form-field";
@@ -372,7 +373,7 @@ export default function OnlineClassesPage() {
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">No automation runs have been recorded yet.</p>
+            <EmptyState title="No automation runs yet" description="Run the automation cycle once to start generating history here." />
           )}
         </CardContent>
       </Card>
@@ -459,7 +460,7 @@ export default function OnlineClassesPage() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-muted-foreground">No participant sessions have been synced yet.</p>
+                  <EmptyState title="No participants synced" description="Sync the provider session to pull join activity and auto-attendance evidence." />
                 )}
               </div>
             </div>

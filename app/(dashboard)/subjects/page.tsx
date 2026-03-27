@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -200,10 +201,7 @@ export default function SubjectsPage() {
                   <FormField label="Description" error={form.formState.errors.description}>
                     <Input {...form.register("description")} />
                   </FormField>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" {...form.register("isActive")} />
-                    Keep subject active
-                  </label>
+                  <Checkbox {...form.register("isActive")} label="Keep subject active" />
                   <div className="flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                       Cancel

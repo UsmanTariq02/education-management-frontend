@@ -12,10 +12,12 @@ import { MetricCard } from "@/components/cards/metric-card";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { FormField } from "@/components/forms/form-field";
+import { DetailItem } from "@/components/shared/detail-item";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
@@ -273,7 +275,7 @@ export default function OrganizationsPage() {
             <DialogTrigger asChild>
               <Button>Onboard organization</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingOrganization ? "Edit organization" : "Onboard organization"}</DialogTitle>
                 <DialogDescription>Create a tenant boundary before assigning admins, staff, and students.</DialogDescription>
@@ -304,31 +306,26 @@ export default function OrganizationsPage() {
                   <p className="text-sm font-medium">Enabled modules</p>
                   <div className="grid gap-2 rounded-xl border p-4 md:grid-cols-2">
                     {organizationModules.map((module) => (
-                      <label key={module} className="flex items-center gap-3 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={form.watch("enabledModules").includes(module)}
-                          onChange={(event) => {
-                            const current = form.getValues("enabledModules");
-                            form.setValue(
-                              "enabledModules",
-                              event.target.checked ? [...current, module] : current.filter((item) => item !== module),
-                              { shouldValidate: true, shouldDirty: true },
-                            );
-                          }}
-                        />
-                        <span>{module.replaceAll("_", " ")}</span>
-                      </label>
+                      <Checkbox
+                        key={module}
+                        checked={form.watch("enabledModules").includes(module)}
+                        onChange={(event) => {
+                          const current = form.getValues("enabledModules");
+                          form.setValue(
+                            "enabledModules",
+                            event.target.checked ? [...current, module] : current.filter((item) => item !== module),
+                            { shouldValidate: true, shouldDirty: true },
+                          );
+                        }}
+                        label={module.replaceAll("_", " ")}
+                      />
                     ))}
                   </div>
                   {form.formState.errors.enabledModules ? (
                     <p className="text-xs text-destructive">{form.formState.errors.enabledModules.message}</p>
                   ) : null}
                 </div>
-                <label className="flex items-center gap-3 text-sm md:col-span-2">
-                  <input type="checkbox" {...form.register("isActive")} />
-                  <span>Organization is active</span>
-                </label>
+                <Checkbox {...form.register("isActive")} label="Organization is active" containerClassName="md:col-span-2" />
                 <div className="md:col-span-2 flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                     Cancel
@@ -360,7 +357,7 @@ export default function OrganizationsPage() {
         }}
       />
       <Dialog open={Boolean(selectedOrganization)} onOpenChange={(nextOpen) => !nextOpen && setSelectedOrganization(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Organization detail</DialogTitle>
             <DialogDescription>Review tenant identity, capacity, modules, and operational totals before making platform changes.</DialogDescription>
@@ -368,30 +365,13 @@ export default function OrganizationsPage() {
           {selectedOrganization ? (
             <div className="space-y-4 text-sm">
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Organization</p>
-                  <p className="mt-1 font-medium">{selectedOrganization.name}</p>
-                  <p className="text-xs text-muted-foreground">{selectedOrganization.slug}</p>
-                </div>
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Status</p>
-                  <p className="mt-1 font-medium">{selectedOrganization.isActive ? "Active" : "Inactive"}</p>
-                  <p className="text-xs text-muted-foreground">Onboarded {formatDate(selectedOrganization.createdAt)}</p>
-                </div>
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Contact</p>
-                  <p className="mt-1 font-medium">{selectedOrganization.email ?? "No email"}</p>
-                  <p className="text-xs text-muted-foreground">{selectedOrganization.phone ?? "No phone"}</p>
-                </div>
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Capacity</p>
-                  <p className="mt-1 font-medium">{selectedOrganization.totalUsers}/{selectedOrganization.userLimit} users</p>
-                  <p className="text-xs text-muted-foreground">{selectedOrganization.totalStudents}/{selectedOrganization.studentLimit} students</p>
-                </div>
-              </div>
-              <div className="rounded-xl border p-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Address</p>
-                <p className="mt-1">{selectedOrganization.address ?? "No address recorded"}</p>
+                <DetailItem label="Organization" value={selectedOrganization.name} />
+                <DetailItem label="Slug" value={selectedOrganization.slug} />
+                <DetailItem label="Status" value={`${selectedOrganization.isActive ? "Active" : "Inactive"} · Onboarded ${formatDate(selectedOrganization.createdAt)}`} />
+                <DetailItem label="Contact" value={`${selectedOrganization.email ?? "No email"} · ${selectedOrganization.phone ?? "No phone"}`} />
+                <DetailItem label="Users capacity" value={`${selectedOrganization.totalUsers}/${selectedOrganization.userLimit}`} />
+                <DetailItem label="Students capacity" value={`${selectedOrganization.totalStudents}/${selectedOrganization.studentLimit}`} />
+                <DetailItem label="Address" value={selectedOrganization.address ?? "No address recorded"} className="md:col-span-2" />
               </div>
               <div className="rounded-2xl border p-4">
                 <p className="text-sm font-medium">Tenant summary</p>

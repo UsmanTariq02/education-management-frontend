@@ -5,9 +5,11 @@ import { Fingerprint, ShieldCheck, ShieldX, Smartphone, Waypoints } from "lucide
 import { toast } from "sonner";
 import { authApi } from "@/features/auth/api/auth-api";
 import { MetricCard } from "@/components/cards/metric-card";
+import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { DetailItem } from "@/components/shared/detail-item";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,7 +75,7 @@ export default function SecurityPage() {
               sessions.map((session) => (
                 <div key={session.id} className="rounded-2xl border p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
+                    <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={session.revokedAt ? "outline" : "success"}>
                           {session.revokedAt ? "Revoked" : "Active"}
@@ -81,18 +83,12 @@ export default function SecurityPage() {
                         <Badge variant="secondary">{session.ipAddress ?? "IP unavailable"}</Badge>
                       </div>
                       <p className="text-sm font-medium text-foreground">{session.userAgent ?? "Unknown device"}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Created {formatDate(session.createdAt, "MMM d, yyyy p")} · Expires {formatDate(session.expiresAt, "MMM d, yyyy p")}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Last used {session.lastUsedAt ? formatDate(session.lastUsedAt, "MMM d, yyyy p") : "at login"}
-                      </p>
-                      {session.revokedAt ? (
-                        <p className="text-sm text-muted-foreground">
-                          Revoked {formatDate(session.revokedAt, "MMM d, yyyy p")}
-                          {session.revocationReason ? ` · ${session.revocationReason.replaceAll("-", " ")}` : ""}
-                        </p>
-                      ) : null}
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <DetailItem label="Created" value={formatDate(session.createdAt, "MMM d, yyyy p")} />
+                        <DetailItem label="Expires" value={formatDate(session.expiresAt, "MMM d, yyyy p")} />
+                        <DetailItem label="Last used" value={session.lastUsedAt ? formatDate(session.lastUsedAt, "MMM d, yyyy p") : "At login"} />
+                        {session.revokedAt ? <DetailItem label="Revoked" value={`${formatDate(session.revokedAt, "MMM d, yyyy p")}${session.revocationReason ? ` · ${session.revocationReason.replaceAll("-", " ")}` : ""}`} /> : null}
+                      </div>
                     </div>
                     {!session.revokedAt ? (
                       <Button
@@ -108,7 +104,7 @@ export default function SecurityPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground">No session history is available yet.</p>
+              <EmptyState title="No session history" description="Active and historical refresh sessions will appear here after account use." />
             )}
           </CardContent>
         </Card>
@@ -140,7 +136,7 @@ export default function SecurityPage() {
             recentLoginEvents.map((event) => (
               <div key={event.id} className="rounded-2xl border p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
+                  <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={successStatuses.has(event.status) ? "success" : event.status === "FAILED" ? "warning" : "danger"}>
                         {event.status.replaceAll("_", " ")}
@@ -148,19 +144,17 @@ export default function SecurityPage() {
                       <Badge variant="outline">{event.ipAddress ?? "IP unavailable"}</Badge>
                     </div>
                     <p className="text-sm font-medium text-foreground">{event.userAgent ?? "Unknown device"}</p>
-                    <p className="text-sm text-muted-foreground">{formatDate(event.createdAt, "MMM d, yyyy p")}</p>
-                  </div>
-                  <div className="text-right text-sm text-muted-foreground">
-                    <p>{event.email}</p>
-                    {event.failureReason ? <p>{event.failureReason.replaceAll("-", " ")}</p> : null}
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <DetailItem label="Timestamp" value={formatDate(event.createdAt, "MMM d, yyyy p")} />
+                      <DetailItem label="Account" value={event.email} />
+                      {event.failureReason ? <DetailItem label="Reason" value={event.failureReason.replaceAll("-", " ")} className="md:col-span-2" /> : null}
+                    </div>
                   </div>
                 </div>
               </div>
             ))
           ) : (
-            <div className="rounded-2xl border bg-muted/30 p-6 text-sm text-muted-foreground">
-              No authentication events have been recorded yet.
-            </div>
+            <EmptyState title="No authentication events" description="Login, refresh, logout, and blocked attempts will appear here once recorded." />
           )}
         </CardContent>
       </Card>

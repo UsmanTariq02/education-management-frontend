@@ -12,11 +12,13 @@ import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { FormField } from "@/components/forms/form-field";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { DetailItem } from "@/components/shared/detail-item";
 import { OrganizationScopeBanner } from "@/components/shared/organization-scope-banner";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { academicSessionsApi } from "@/features/academic-sessions/api/academic-sessions-api";
@@ -241,14 +243,8 @@ export default function AcademicSessionsPage() {
                   <FormField label="Description" error={form.formState.errors.description} className="md:col-span-2">
                     <Input {...form.register("description")} />
                   </FormField>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" {...form.register("isCurrent")} />
-                    Mark as current session
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" {...form.register("isActive")} />
-                    Keep session active
-                  </label>
+                  <Checkbox {...form.register("isCurrent")} label="Mark as current session" />
+                  <Checkbox {...form.register("isActive")} label="Keep session active" />
                   <div className="md:col-span-2 flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                       Cancel
@@ -277,14 +273,14 @@ export default function AcademicSessionsPage() {
             <DialogDescription>Review the session timeline and default academic state.</DialogDescription>
           </DialogHeader>
           {selectedSession ? (
-            <div className="space-y-3 text-sm">
-              <p><span className="font-medium">Name:</span> {selectedSession.name}</p>
-              <p><span className="font-medium">Code:</span> {selectedSession.code}</p>
-              <p><span className="font-medium">Duration:</span> {formatDate(selectedSession.startDate)} - {formatDate(selectedSession.endDate)}</p>
-              <p><span className="font-medium">Current:</span> {selectedSession.isCurrent ? "Yes" : "No"}</p>
-              <p><span className="font-medium">Status:</span> {selectedSession.isActive ? "Active" : "Inactive"}</p>
-              <p><span className="font-medium">Description:</span> {selectedSession.description ?? "—"}</p>
-              {user?.roles.includes("SUPER_ADMIN") ? <p><span className="font-medium">Organization:</span> {selectedSession.organizationName}</p> : null}
+            <div className="grid gap-3 md:grid-cols-2">
+              <DetailItem label="Name" value={selectedSession.name} />
+              <DetailItem label="Code" value={selectedSession.code} />
+              <DetailItem label="Duration" value={`${formatDate(selectedSession.startDate)} - ${formatDate(selectedSession.endDate)}`} />
+              <DetailItem label="Current" value={selectedSession.isCurrent ? "Yes" : "No"} />
+              <DetailItem label="Status" value={selectedSession.isActive ? "Active" : "Inactive"} />
+              <DetailItem label="Description" value={selectedSession.description ?? "—"} className="md:col-span-2" />
+              {user?.roles.includes("SUPER_ADMIN") ? <DetailItem label="Organization" value={selectedSession.organizationName} className="md:col-span-2" /> : null}
             </div>
           ) : null}
         </DialogContent>

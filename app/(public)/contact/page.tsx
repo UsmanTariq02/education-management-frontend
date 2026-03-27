@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
@@ -155,21 +156,19 @@ export default function ContactPage() {
                 <p className="text-sm font-medium">Required modules</p>
                 <div className="grid gap-2 rounded-xl border p-4 sm:grid-cols-2">
                   {publicModuleOptions.map((module) => (
-                    <label key={module} className="flex items-center gap-3 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={form.watch("requestedModules").includes(module)}
-                        onChange={(event) => {
-                          const current = form.getValues("requestedModules");
-                          form.setValue(
-                            "requestedModules",
-                            event.target.checked ? [...current, module] : current.filter((item) => item !== module),
-                            { shouldDirty: true, shouldValidate: true },
-                          );
-                        }}
-                      />
-                      <span>{module}</span>
-                    </label>
+                    <Checkbox
+                      key={module}
+                      checked={form.watch("requestedModules").includes(module)}
+                      onChange={(event) => {
+                        const current = form.getValues("requestedModules");
+                        form.setValue(
+                          "requestedModules",
+                          event.target.checked ? [...current, module] : current.filter((item) => item !== module),
+                          { shouldDirty: true, shouldValidate: true },
+                        );
+                      }}
+                      label={module}
+                    />
                   ))}
                 </div>
                 {form.formState.errors.requestedModules ? (

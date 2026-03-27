@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Calculator, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { publicModuleOptions } from "@/lib/marketing/module-catalog";
 
 export function PricingCalculator() {
@@ -48,18 +49,17 @@ export function PricingCalculator() {
                 const isSelected = selectedModules.includes(module);
 
                 return (
-                  <label key={module} className="flex items-center gap-3 rounded-xl border bg-background px-4 py-3 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(event) => {
-                        setSelectedModules((current) =>
-                          event.target.checked ? [...current, module] : current.filter((item) => item !== module),
-                        );
-                      }}
-                    />
-                    <span>{module}</span>
-                  </label>
+                  <Checkbox
+                    key={module}
+                    checked={isSelected}
+                    onChange={(event) => {
+                      setSelectedModules((current) =>
+                        event.target.checked ? [...current, module] : current.filter((item) => item !== module),
+                      );
+                    }}
+                    label={module}
+                    containerClassName="rounded-xl border bg-background px-4 py-3"
+                  />
                 );
               })}
             </div>

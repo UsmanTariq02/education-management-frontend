@@ -218,13 +218,13 @@ export default function StudentDetailPage() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">
+      <div className="grid gap-6 2xl:grid-cols-[1.1fr_1fr]">
         <Card>
           <CardHeader>
             <CardTitle>Student profile</CardTitle>
             <CardDescription>Core student and guardian identity with current tenant and batch enrollment context.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
+          <CardContent className="grid gap-4 lg:grid-cols-2">
             <InfoRow label="Student name" value={student.fullName} icon={<UserRound className="h-4 w-4" />} />
             <InfoRow label="Organization" value={student.organizationName} icon={<BookOpenCheck className="h-4 w-4" />} />
             <InfoRow label="Student email" value={student.email ?? "Not provided"} icon={<Mail className="h-4 w-4" />} />
@@ -275,7 +275,7 @@ export default function StudentDetailPage() {
         </ChartCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid gap-6 2xl:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle>Fee summary</CardTitle>
@@ -335,7 +335,7 @@ export default function StudentDetailPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid gap-6 2xl:grid-cols-3">
         <ChartCard title="Latest result subject radar" description="Subject-wise performance profile from the latest published academic result.">
           {latestAcademicResult ? (
             <div className="h-80">
@@ -392,7 +392,7 @@ export default function StudentDetailPage() {
         </ChartCard>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid gap-6 2xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Recent fee records</CardTitle>

@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/form-field";
@@ -497,21 +498,19 @@ export default function UsersPage() {
                     ) : null}
                     <div className="grid gap-2 rounded-xl border p-4">
                       {assignableRoles.map((role) => (
-                        <label key={role.id} className="flex items-center gap-3 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={form.watch("roleIds").includes(role.id)}
-                            onChange={(event) => {
-                              const current = form.getValues("roleIds");
-                              form.setValue(
-                                "roleIds",
-                                event.target.checked ? [...current, role.id] : current.filter((item) => item !== role.id),
-                                { shouldValidate: true, shouldDirty: true },
-                              );
-                            }}
-                          />
-                          <span>{role.name}</span>
-                        </label>
+                        <Checkbox
+                          key={role.id}
+                          checked={form.watch("roleIds").includes(role.id)}
+                          onChange={(event) => {
+                            const current = form.getValues("roleIds");
+                            form.setValue(
+                              "roleIds",
+                              event.target.checked ? [...current, role.id] : current.filter((item) => item !== role.id),
+                              { shouldValidate: true, shouldDirty: true },
+                            );
+                          }}
+                          label={role.name}
+                        />
                       ))}
                     </div>
                     {form.formState.errors.roleIds ? <p className="text-xs text-destructive">{form.formState.errors.roleIds.message}</p> : null}
@@ -525,10 +524,12 @@ export default function UsersPage() {
                           : "Staff accounts are best used for day-to-day support work with restricted permissions and no platform governance access."}
                     </div>
                   ) : null}
-                  <label className="flex items-center gap-3 text-sm md:col-span-2">
-                    <input type="checkbox" checked={form.watch("isActive")} onChange={(event) => form.setValue("isActive", event.target.checked, { shouldDirty: true })} />
-                    <span>User account is active</span>
-                  </label>
+                  <Checkbox
+                    checked={form.watch("isActive")}
+                    onChange={(event) => form.setValue("isActive", event.target.checked, { shouldDirty: true })}
+                    label="User account is active"
+                    containerClassName="md:col-span-2"
+                  />
                   <div className="md:col-span-2 flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                       Cancel

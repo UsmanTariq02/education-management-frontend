@@ -17,6 +17,7 @@ import { DataTable } from "@/components/tables/data-table";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { FormField } from "@/components/forms/form-field";
+import { DetailItem } from "@/components/shared/detail-item";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { OrganizationScopeBanner } from "@/components/shared/organization-scope-banner";
 import { PageHeader } from "@/components/shared/page-header";
@@ -407,26 +408,10 @@ export default function ExamResultsPage() {
           {selectedResult ? (
             <div className="space-y-4 text-sm">
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Student</p>
-                  <p className="mt-1 font-medium">{selectedResult.studentName}</p>
-                </div>
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Exam</p>
-                  <p className="mt-1 font-medium">{selectedResult.examName}</p>
-                  <p className="text-xs text-muted-foreground">{selectedResult.examCode}</p>
-                </div>
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Batch</p>
-                  <p className="mt-1 font-medium">{selectedResult.batchName}</p>
-                </div>
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Outcome</p>
-                  <p className="mt-1 font-medium">
-                    {selectedResult.percentage}% {selectedResult.grade ? `• ${selectedResult.grade}` : ""}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{selectedResult.status}</p>
-                </div>
+                <DetailItem label="Student" value={selectedResult.studentName} />
+                <DetailItem label="Exam" value={`${selectedResult.examName} · ${selectedResult.examCode}`} />
+                <DetailItem label="Batch" value={selectedResult.batchName} />
+                <DetailItem label="Outcome" value={`${selectedResult.percentage}%${selectedResult.grade ? ` · ${selectedResult.grade}` : ""} · ${selectedResult.status}`} />
               </div>
               <div className="space-y-3 rounded-2xl border p-4">
                 <p className="text-sm font-medium">Subject breakdown</p>
@@ -452,12 +437,7 @@ export default function ExamResultsPage() {
                   </div>
                 ))}
               </div>
-              {selectedResult.remarks ? (
-                <div className="rounded-xl border p-3">
-                  <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Overall remarks</p>
-                  <p className="mt-1">{selectedResult.remarks}</p>
-                </div>
-              ) : null}
+              {selectedResult.remarks ? <DetailItem label="Overall remarks" value={selectedResult.remarks} /> : null}
             </div>
           ) : null}
         </DialogContent>

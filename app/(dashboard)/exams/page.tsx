@@ -19,11 +19,13 @@ import { DataTable } from "@/components/tables/data-table";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { FormField } from "@/components/forms/form-field";
+import { DetailItem } from "@/components/shared/detail-item";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { OrganizationScopeBanner } from "@/components/shared/organization-scope-banner";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -311,10 +313,7 @@ export default function ExamsPage() {
                       </div>
                     ))}
                   </div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" {...form.register("isPublished")} />
-                    Publish exam immediately
-                  </label>
+                  <Checkbox {...form.register("isPublished")} label="Publish exam immediately" />
                   <div className="flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                     <Button type="submit" disabled={mutation.isPending}>{editingExam ? "Save changes" : "Create exam"}</Button>
@@ -341,10 +340,10 @@ export default function ExamsPage() {
           {selectedExam ? (
             <div className="space-y-4 text-sm">
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border p-3"><p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Exam</p><p className="mt-1 font-medium">{selectedExam.name}</p><p className="text-xs text-muted-foreground">{selectedExam.code}</p></div>
-                <div className="rounded-xl border p-3"><p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Batch</p><p className="mt-1 font-medium">{selectedExam.batchName}</p></div>
-                <div className="rounded-xl border p-3"><p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Session</p><p className="mt-1 font-medium">{selectedExam.academicSessionName ?? "General"}</p></div>
-                <div className="rounded-xl border p-3"><p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Date & status</p><p className="mt-1 font-medium">{formatDate(selectedExam.examDate)}</p><p className="text-xs text-muted-foreground">{selectedExam.isPublished ? "Published" : "Draft"}</p></div>
+                <DetailItem label="Exam" value={`${selectedExam.name} · ${selectedExam.code}`} />
+                <DetailItem label="Batch" value={selectedExam.batchName} />
+                <DetailItem label="Session" value={selectedExam.academicSessionName ?? "General"} />
+                <DetailItem label="Date & status" value={`${formatDate(selectedExam.examDate)} · ${selectedExam.isPublished ? "Published" : "Draft"}`} />
               </div>
               <div className="space-y-3 rounded-2xl border p-4">
                 <p className="text-sm font-medium">Subject papers</p>
@@ -365,7 +364,7 @@ export default function ExamsPage() {
                   </div>
                 ))}
               </div>
-              {selectedExam.description ? <div className="rounded-xl border p-3"><p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Description</p><p className="mt-1">{selectedExam.description}</p></div> : null}
+              {selectedExam.description ? <DetailItem label="Description" value={selectedExam.description} /> : null}
             </div>
           ) : null}
         </DialogContent>

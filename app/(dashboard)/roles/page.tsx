@@ -18,6 +18,7 @@ import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/form-field";
@@ -166,22 +167,20 @@ export default function RolesPage() {
                     <p className="text-sm font-medium">Permissions</p>
                     <div className="grid max-h-72 gap-2 overflow-y-auto rounded-xl border p-4">
                       {permissionsQuery.data.map((permission) => (
-                        <label key={permission.id} className="flex items-center gap-3 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={form.watch("permissionIds").includes(permission.id)}
-                            onChange={(event) => {
-                              const current = form.getValues("permissionIds");
-                              form.setValue(
-                                "permissionIds",
-                                event.target.checked
-                                  ? [...current, permission.id]
-                                  : current.filter((item) => item !== permission.id),
-                              );
-                            }}
-                          />
-                          <span>{permission.name}</span>
-                        </label>
+                        <Checkbox
+                          key={permission.id}
+                          checked={form.watch("permissionIds").includes(permission.id)}
+                          onChange={(event) => {
+                            const current = form.getValues("permissionIds");
+                            form.setValue(
+                              "permissionIds",
+                              event.target.checked
+                                ? [...current, permission.id]
+                                : current.filter((item) => item !== permission.id),
+                            );
+                          }}
+                          label={permission.name}
+                        />
                       ))}
                     </div>
                   </div>

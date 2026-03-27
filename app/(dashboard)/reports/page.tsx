@@ -391,7 +391,7 @@ export default function ReportsPage() {
         title="Reports and analytics"
         description="Organization-level collection, pending dues, attendance, student growth, and reminder performance in one reporting workspace."
         actions={
-          <>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
             <Button variant="outline" onClick={handleExportOverview}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Export overview
@@ -406,7 +406,7 @@ export default function ReportsPage() {
                 Review overdue fees
               </Link>
             </Button>
-          </>
+          </div>
         }
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -437,7 +437,7 @@ export default function ReportsPage() {
         </div>
       ) : null}
       {feeOverview ? (
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid gap-6 2xl:grid-cols-2">
           <ChartCard
             title="Collection rate by period"
             description="A quick visual read on how efficiently the organization is converting billed fees into collected revenue."
@@ -530,7 +530,7 @@ export default function ReportsPage() {
           </div>
         </div>
       ) : null}
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2">
         <ChartCard
           title="Collection performance by period"
           description="Current month, quarter, and year billed amounts split against collected, pending, and overdue fee positions."
@@ -607,7 +607,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2">
         <ChartCard title="Academic operations radar" description="A broader shape of current academic activity instead of another linear chart.">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -624,7 +624,7 @@ export default function ReportsPage() {
           <HeatmapGrid cells={attendanceHeatmapCells} columns={7} />
         </ChartCard>
       </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2">
         <ChartCard title="Student growth trend">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -663,7 +663,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2">
         <ChartCard title="Attendance summary">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -698,7 +698,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid gap-6 2xl:grid-cols-3">
         <ChartCard title="Reminder channels">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -751,7 +751,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2">
         <ChartCard title="Fee status breakdown">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -784,7 +784,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid gap-6 2xl:grid-cols-3">
         <ChartCard title="Student batch distribution">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -850,7 +850,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2">
         <ChartCard title="Academic Performance By Batch" description="Average result percentage by batch">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -878,7 +878,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2">
         <ChartCard title="Batch performance spread" description="A box-plot-style summary of result variability across batches.">
           {batchPerformanceSpread ? (
             <BoxPlotSummary
@@ -906,7 +906,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2">
         <ChartCard title="Grade Distribution" description="Outcome mix across recorded academic results">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -941,7 +941,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
       {isSuperAdmin ? (
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid gap-6 2xl:grid-cols-2">
           <ChartCard title="Organization growth" description="Tenant onboarding growth and linked student footprint over time.">
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">

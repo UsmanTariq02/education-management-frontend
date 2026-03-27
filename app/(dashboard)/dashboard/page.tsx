@@ -14,6 +14,7 @@ import { metricCardData } from "@/lib/utils/dashboard";
 import { ChartCard } from "@/components/charts/chart-card";
 import { HeatmapGrid } from "@/components/charts/heatmap-grid";
 import { MetricCard } from "@/components/cards/metric-card";
+import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -408,9 +409,10 @@ export default function DashboardPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  {isTeacher ? "No online classes are assigned to you yet." : "No upcoming online classes are scheduled yet."}
-                </p>
+                <EmptyState
+                  title="No upcoming online classes"
+                  description={isTeacher ? "No online classes are assigned to you yet." : "No upcoming online classes are scheduled yet."}
+                />
               )}
             </CardContent>
           </Card>
@@ -419,14 +421,16 @@ export default function DashboardPage() {
               <CardTitle>Online class health</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
-              <div className="rounded-2xl border p-4">
-                <p className="font-medium">Last automation run</p>
-                <p className="mt-1 text-muted-foreground">
-                  {onlineClassesSummaryQuery.data?.lastRun
-                    ? `${onlineClassesSummaryQuery.data.lastRun.status} · ${formatDate(onlineClassesSummaryQuery.data.lastRun.startedAt, "MMM d, yyyy p")}`
-                    : "No run recorded yet"}
-                </p>
-              </div>
+              {onlineClassesSummaryQuery.data?.lastRun ? (
+                <div className="rounded-2xl border p-4">
+                  <p className="font-medium">Last automation run</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {`${onlineClassesSummaryQuery.data.lastRun.status} · ${formatDate(onlineClassesSummaryQuery.data.lastRun.startedAt, "MMM d, yyyy p")}`}
+                  </p>
+                </div>
+              ) : (
+                <EmptyState title="No automation run yet" description="Online class automation has not recorded a run yet." />
+              )}
               <div className="rounded-2xl border p-4">
                 <p className="font-medium">Failed sync sessions</p>
                 <p className="mt-1 text-muted-foreground">{onlineClassesSummaryQuery.data?.failedSessionsCount ?? 0}</p>
