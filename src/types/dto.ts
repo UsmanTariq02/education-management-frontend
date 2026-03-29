@@ -337,6 +337,18 @@ export interface CreateAssessmentDto {
 
 export interface UpdateAssessmentDto extends Partial<CreateAssessmentDto> {}
 
+export interface ReviewAssessmentAnswerDto {
+  answerId: string;
+  awardedMarks: number;
+  isCorrect?: boolean;
+  feedback?: string;
+}
+
+export interface ReviewAssessmentAttemptDto {
+  answers: ReviewAssessmentAnswerDto[];
+  finalize?: boolean;
+}
+
 export interface SavePortalAssessmentAnswerDto {
   questionId: string;
   selectedOptionId?: string;

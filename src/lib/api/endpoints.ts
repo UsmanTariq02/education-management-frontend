@@ -101,6 +101,9 @@ export const endpoints = {
   assessments: {
     list: "/assessments",
     detail: (id: string) => `/assessments/${id}`,
+    reviewQueue: (id: string) => `/assessments/${id}/review-queue`,
+    analytics: (id: string) => `/assessments/${id}/analytics`,
+    reviewAttempt: (attemptId: string) => `/assessments/attempts/${attemptId}/review`,
   },
   examResults: {
     list: "/exam-results",

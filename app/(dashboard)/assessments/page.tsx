@@ -232,6 +232,7 @@ export default function AssessmentsPage() {
   const [detailView, setDetailView] = useState<"overview" | "grading" | "analytics" | "bank">("overview");
   const [questionBank, setQuestionBank] = useState<QuestionBankEntry[]>([]);
   const [gradingWorkspace, setGradingWorkspace] = useState<GradingWorkspaceState>({});
+  const [selectedReviewAttemptId, setSelectedReviewAttemptId] = useState<string | null>(null);
   const [importText, setImportText] = useState("");
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [hasStoredDraft, setHasStoredDraft] = useState(false);
@@ -247,6 +248,16 @@ export default function AssessmentsPage() {
   const batchesQuery = useQuery({ queryKey: ["batches", "assessment-options"], queryFn: () => batchesApi.list({ page: 1, limit: 100 }) });
   const subjectsQuery = useQuery({ queryKey: ["subjects", "assessment-options"], queryFn: () => subjectsApi.list({ page: 1, limit: 100 }) });
   const teachersQuery = useQuery({ queryKey: ["teachers", "assessment-options"], queryFn: () => teachersApi.list({ page: 1, limit: 100 }) });
+  const reviewQueueQuery = useQuery({
+    queryKey: ["assessment-review-queue", selectedAssessment?.id],
+    queryFn: () => assessmentsApi.reviewQueue(selectedAssessment!.id),
+    enabled: Boolean(selectedAssessment?.id),
+  });
+  const analyticsQuery = useQuery({
+    queryKey: ["assessment-analytics", selectedAssessment?.id],
+    queryFn: () => assessmentsApi.analytics(selectedAssessment!.id),
+    enabled: Boolean(selectedAssessment?.id),
+  });
 
   const form = useForm<AssessmentSchema>({
     resolver: zodResolver(assessmentSchema),
@@ -267,11 +278,22 @@ export default function AssessmentsPage() {
   useEffect(() => {
     if (!selectedAssessment) {
       setGradingWorkspace({});
+      setSelectedReviewAttemptId(null);
       return;
     }
 
     setGradingWorkspace(readGradingWorkspace(selectedAssessment.id));
   }, [selectedAssessment]);
+
+  useEffect(() => {
+    if (!reviewQueueQuery.data) {
+      return;
+    }
+
+    const pendingAttempt =
+      reviewQueueQuery.data.attempts.find((attempt) => attempt.status === "REVIEW_PENDING") ?? reviewQueueQuery.data.attempts[0] ?? null;
+    setSelectedReviewAttemptId((current) => current ?? pendingAttempt?.attemptId ?? null);
+  }, [reviewQueueQuery.data]);
 
   useEffect(() => {
     if (!open || editingAssessment) {
@@ -426,6 +448,42 @@ export default function AssessmentsPage() {
     writeGradingWorkspace(selectedAssessment.id, nextState);
   }
 
+  const reviewMutation = useMutation({
+    mutationFn: async (finalize: boolean) => {
+      if (!selectedReviewAttemptId || !reviewQueueQuery.data) {
+        throw new Error("No review attempt selected.");
+      }
+
+      const attempt = reviewQueueQuery.data.attempts.find((item) => item.attemptId === selectedReviewAttemptId);
+      if (!attempt) {
+        throw new Error("Selected review attempt could not be found.");
+      }
+
+      return assessmentsApi.reviewAttempt(selectedReviewAttemptId, {
+        finalize,
+        answers: attempt.answers
+          .filter((answer) => ["SHORT_ANSWER", "LONG_ANSWER"].includes(answer.type))
+          .map((answer) => ({
+            answerId: answer.id,
+            awardedMarks: gradingWorkspace[answer.questionId]?.expectedScore ?? answer.awardedMarks ?? answer.maxMarks,
+            feedback: gradingWorkspace[answer.questionId]?.suggestedFeedback ?? answer.feedback ?? undefined,
+            isCorrect: gradingWorkspace[answer.questionId]?.expectedScore
+              ? gradingWorkspace[answer.questionId].expectedScore >= answer.maxMarks
+              : answer.isCorrect ?? undefined,
+          })),
+      });
+    },
+    onSuccess: async () => {
+      if (!selectedAssessment) {
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["assessment-review-queue", selectedAssessment.id] });
+      await queryClient.invalidateQueries({ queryKey: ["assessment-analytics", selectedAssessment.id] });
+      toast.success("Assessment review saved.");
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Assessment review failed."),
+  });
+
   const assessments = assessmentsQuery.data?.items ?? [];
   const stats = useMemo(
     () => ({
@@ -474,6 +532,10 @@ export default function AssessmentsPage() {
       gradingTemplatesReady: subjectiveQuestions.filter((question) => gradingWorkspace[question.id]?.rubricNote?.trim()).length,
     };
   }, [gradingWorkspace, selectedAssessment]);
+  const selectedReviewAttempt = useMemo(
+    () => reviewQueueQuery.data?.attempts.find((attempt) => attempt.attemptId === selectedReviewAttemptId) ?? null,
+    [reviewQueueQuery.data, selectedReviewAttemptId],
+  );
 
   const columns = useMemo<Array<ColumnDef<Assessment>>>(
     () => [
@@ -1021,7 +1083,7 @@ export default function AssessmentsPage() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="rounded-xl border p-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Manual review queue</p>
-                  <p className="mt-1 text-2xl font-semibold">{selectedAssessmentInsights.subjectiveQuestions.length}</p>
+                  <p className="mt-1 text-2xl font-semibold">{reviewQueueQuery.data?.reviewPendingAttempts ?? selectedAssessmentInsights.subjectiveQuestions.length}</p>
                 </div>
                 <div className="rounded-xl border p-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Rubrics prepared</p>
@@ -1029,45 +1091,63 @@ export default function AssessmentsPage() {
                 </div>
                 <div className="rounded-xl border p-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Estimated review time</p>
-                  <p className="mt-1 text-2xl font-semibold">{selectedAssessmentInsights.subjectiveQuestions.length * 4} min</p>
+                  <p className="mt-1 text-2xl font-semibold">{(reviewQueueQuery.data?.reviewPendingAttempts ?? selectedAssessmentInsights.subjectiveQuestions.length) * 4} min</p>
                 </div>
               </div>
-              {selectedAssessmentInsights.subjectiveQuestions.length ? (
-                selectedAssessmentInsights.subjectiveQuestions.map((question, index) => (
-                  <div key={question.id} className="rounded-xl border border-dashed p-4">
+              {reviewQueueQuery.data?.attempts.length ? (
+                <>
+                  <div className="rounded-xl border p-4">
+                    <FormField label="Attempt under review">
+                      <NativeSelect
+                        value={selectedReviewAttemptId ?? ""}
+                        onChange={(event) => setSelectedReviewAttemptId(event.target.value)}
+                      >
+                        <option value="">Select attempt</option>
+                        {reviewQueueQuery.data.attempts.map((attempt) => (
+                          <option key={attempt.attemptId} value={attempt.attemptId}>
+                            {attempt.studentName} · Attempt {attempt.attemptNumber} · {attempt.status}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </FormField>
+                  </div>
+                  {(selectedReviewAttempt?.answers.filter((answer) => ["SHORT_ANSWER", "LONG_ANSWER"].includes(answer.type)) ?? []).map((answer, index) => (
+                  <div key={answer.id} className="rounded-xl border border-dashed p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="font-medium">
-                          Review {index + 1}. {question.prompt}
-                        </p>
+                        <p className="font-medium">Review {index + 1}. {answer.prompt}</p>
                         <p className="text-sm text-muted-foreground">
-                          {question.type.replaceAll("_", " ")} · {question.marks} marks
+                          {answer.type.replaceAll("_", " ")} · {answer.maxMarks} marks · {selectedReviewAttempt?.studentName}
                         </p>
                       </div>
-                      <Badge variant="outline">{gradingWorkspace[question.id]?.reviewPriority ?? "MEDIUM"} priority</Badge>
+                      <Badge variant="outline">{gradingWorkspace[answer.questionId]?.reviewPriority ?? "MEDIUM"} priority</Badge>
+                    </div>
+                    <div className="mt-3 rounded-xl border bg-muted/20 px-4 py-3 text-sm">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Submitted answer</p>
+                      <p className="mt-1 whitespace-pre-wrap">{answer.answerText ?? answer.selectedOptionText ?? "No answer submitted"}</p>
                     </div>
                     <div className="mt-4 grid gap-4 md:grid-cols-2">
                       <FormField label="Rubric note">
                         <Textarea
-                          value={gradingWorkspace[question.id]?.rubricNote ?? ""}
-                          onChange={(event) => updateGradingWorkspace(question.id, { rubricNote: event.target.value, expectedScore: gradingWorkspace[question.id]?.expectedScore ?? question.marks })}
+                          value={gradingWorkspace[answer.questionId]?.rubricNote ?? ""}
+                          onChange={(event) => updateGradingWorkspace(answer.questionId, { rubricNote: event.target.value, expectedScore: gradingWorkspace[answer.questionId]?.expectedScore ?? answer.maxMarks })}
                           className="min-h-[120px]"
                         />
                       </FormField>
                       <FormField label="Suggested feedback">
                         <Textarea
-                          value={gradingWorkspace[question.id]?.suggestedFeedback ?? ""}
-                          onChange={(event) => updateGradingWorkspace(question.id, { suggestedFeedback: event.target.value, expectedScore: gradingWorkspace[question.id]?.expectedScore ?? question.marks })}
+                          value={gradingWorkspace[answer.questionId]?.suggestedFeedback ?? ""}
+                          onChange={(event) => updateGradingWorkspace(answer.questionId, { suggestedFeedback: event.target.value, expectedScore: gradingWorkspace[answer.questionId]?.expectedScore ?? answer.maxMarks })}
                           className="min-h-[120px]"
                         />
                       </FormField>
                       <FormField label="Priority">
                         <NativeSelect
-                          value={gradingWorkspace[question.id]?.reviewPriority ?? "MEDIUM"}
+                          value={gradingWorkspace[answer.questionId]?.reviewPriority ?? "MEDIUM"}
                           onChange={(event) =>
-                            updateGradingWorkspace(question.id, {
+                            updateGradingWorkspace(answer.questionId, {
                               reviewPriority: event.target.value as "LOW" | "MEDIUM" | "HIGH",
-                              expectedScore: gradingWorkspace[question.id]?.expectedScore ?? question.marks,
+                              expectedScore: gradingWorkspace[answer.questionId]?.expectedScore ?? answer.maxMarks,
                             })
                           }
                         >
@@ -1081,9 +1161,9 @@ export default function AssessmentsPage() {
                           type="number"
                           min="0"
                           step="0.5"
-                          value={gradingWorkspace[question.id]?.expectedScore ?? question.marks}
+                          value={gradingWorkspace[answer.questionId]?.expectedScore ?? answer.awardedMarks ?? answer.maxMarks}
                           onChange={(event) =>
-                            updateGradingWorkspace(question.id, {
+                            updateGradingWorkspace(answer.questionId, {
                               expectedScore: Number(event.target.value),
                             })
                           }
@@ -1091,10 +1171,21 @@ export default function AssessmentsPage() {
                       </FormField>
                     </div>
                   </div>
-                ))
+                  ))}
+                  {selectedReviewAttempt ? (
+                    <div className="flex justify-end gap-3">
+                      <Button type="button" variant="outline" onClick={() => reviewMutation.mutate(false)} disabled={reviewMutation.isPending}>
+                        Save Review Draft
+                      </Button>
+                      <Button type="button" onClick={() => reviewMutation.mutate(true)} disabled={reviewMutation.isPending}>
+                        Finalize Attempt Review
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <div className="rounded-xl border p-4 text-sm text-muted-foreground">
-                  This assessment is fully objective, so no manual grading workspace is needed.
+                  No graded attempts are available yet for this assessment.
                 </div>
               )}
               {selectedAssessmentInsights.subjectiveQuestions.length ? (
@@ -1114,55 +1205,59 @@ export default function AssessmentsPage() {
             <div className="mt-5 space-y-4">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Objective coverage</p>
-                  <p className="mt-1 text-2xl font-semibold">{selectedAssessmentInsights.objectiveCoverage}%</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Average score</p>
+                  <p className="mt-1 text-2xl font-semibold">{analyticsQuery.data?.averageScore ?? 0}</p>
                 </div>
                 <div className="rounded-xl border p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Subjective coverage</p>
-                  <p className="mt-1 text-2xl font-semibold">{selectedAssessmentInsights.subjectiveCoverage}%</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Average percentage</p>
+                  <p className="mt-1 text-2xl font-semibold">{analyticsQuery.data?.averagePercentage ?? 0}%</p>
                 </div>
                 <div className="rounded-xl border p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Objective questions</p>
-                  <p className="mt-1 text-2xl font-semibold">{selectedAssessmentInsights.objectiveQuestions.length}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Pass rate</p>
+                  <p className="mt-1 text-2xl font-semibold">{analyticsQuery.data?.passRate ?? 0}%</p>
                 </div>
                 <div className="rounded-xl border p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Subjective questions</p>
-                  <p className="mt-1 text-2xl font-semibold">{selectedAssessmentInsights.subjectiveQuestions.length}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Completed attempts</p>
+                  <p className="mt-1 text-2xl font-semibold">{analyticsQuery.data?.completedAttempts ?? 0}</p>
                 </div>
               </div>
               <div className="grid gap-4 xl:grid-cols-2">
                 <div className="rounded-xl border p-4">
-                  <p className="font-medium">Assessment composition</p>
+                  <p className="font-medium">Question performance</p>
                   <div className="mt-4 space-y-3">
-                    {QUESTION_TYPE_OPTIONS.map((option) => {
-                      const count = selectedAssessment.questions.filter((question) => question.type === option.value).length;
+                    {(analyticsQuery.data?.questionBreakdown ?? []).map((question) => {
                       return (
-                        <div key={option.value} className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm">
-                          <span>{option.label}</span>
-                          <Badge variant="outline">{count}</Badge>
+                        <div key={question.questionId} className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm">
+                          <div>
+                            <p className="font-medium">{question.prompt}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {question.type.replaceAll("_", " ")} · {question.averageAwardedMarks}/{question.maxMarks} avg
+                            </p>
+                          </div>
+                          <Badge variant="outline">{question.accuracyRate}%</Badge>
                         </div>
                       );
                     })}
                   </div>
                 </div>
                 <div className="rounded-xl border p-4">
-                  <p className="font-medium">Portfolio analytics</p>
+                  <p className="font-medium">Assessment composition</p>
                   <div className="mt-4 space-y-3 text-sm">
                     <div className="flex items-center justify-between rounded-xl border px-3 py-2">
-                      <span>Average questions per assessment</span>
-                      <Badge variant="outline">{analytics.averageQuestions}</Badge>
+                      <span>Objective coverage</span>
+                      <Badge variant="outline">{selectedAssessmentInsights.objectiveCoverage}%</Badge>
                     </div>
                     <div className="flex items-center justify-between rounded-xl border px-3 py-2">
-                      <span>Objective questions in portfolio</span>
-                      <Badge variant="outline">{analytics.objectiveCount}</Badge>
+                      <span>Subjective coverage</span>
+                      <Badge variant="outline">{selectedAssessmentInsights.subjectiveCoverage}%</Badge>
                     </div>
                     <div className="flex items-center justify-between rounded-xl border px-3 py-2">
-                      <span>Subjective questions in portfolio</span>
-                      <Badge variant="outline">{analytics.subjectiveCount}</Badge>
+                      <span>Top score</span>
+                      <Badge variant="outline">{analyticsQuery.data?.topScore ?? "-"}</Badge>
                     </div>
                     <div className="flex items-center justify-between rounded-xl border px-3 py-2">
-                      <span>Grading-heavy assessments</span>
-                      <Badge variant="outline">{analytics.gradingHeavyAssessments}</Badge>
+                      <span>Lowest score</span>
+                      <Badge variant="outline">{analyticsQuery.data?.lowestScore ?? "-"}</Badge>
                     </div>
                   </div>
                 </div>

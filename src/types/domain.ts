@@ -542,6 +542,67 @@ export interface PortalAssessmentSubmitResult {
   answers: PortalAssessmentAttemptAnswer[];
 }
 
+export interface AssessmentReviewAnswer {
+  id: string;
+  questionId: string;
+  prompt: string;
+  type: AssessmentQuestionType;
+  maxMarks: number;
+  answerText: string | null;
+  selectedOptionText: string | null;
+  awardedMarks: number | null;
+  isCorrect: boolean | null;
+  feedback: string | null;
+  reviewedAt: string | null;
+}
+
+export interface AssessmentReviewAttempt {
+  attemptId: string;
+  assessmentId: string;
+  studentId: string;
+  studentName: string;
+  status: AssessmentAttemptStatus;
+  attemptNumber: number;
+  submittedAt: string | null;
+  requiresManualReview: boolean;
+  obtainedMarks: number;
+  totalMarks: number;
+  percentage: number;
+  resultStatus: AssessmentResultStatus;
+  answers: AssessmentReviewAnswer[];
+}
+
+export interface AssessmentReviewQueue {
+  assessmentId: string;
+  assessmentTitle: string;
+  totalAttempts: number;
+  reviewPendingAttempts: number;
+  completedAttempts: number;
+  attempts: AssessmentReviewAttempt[];
+}
+
+export interface AssessmentAnalytics {
+  assessmentId: string;
+  assessmentTitle: string;
+  totalAttempts: number;
+  completedAttempts: number;
+  averageScore: number;
+  averagePercentage: number;
+  passRate: number;
+  topScore: number | null;
+  lowestScore: number | null;
+  questionBreakdown: Array<{
+    questionId: string;
+    prompt: string;
+    type: AssessmentQuestionType;
+    maxMarks: number;
+    averageAwardedMarks: number;
+    correctResponses: number;
+    attemptedResponses: number;
+    accuracyRate: number;
+  }>;
+}
+
 export type StudentExamResultStatus = "DRAFT" | "PUBLISHED";
 export type PortalAccountType = "STUDENT" | "PARENT";
 
