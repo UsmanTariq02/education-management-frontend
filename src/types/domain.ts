@@ -542,6 +542,116 @@ export interface PortalAssessmentSubmitResult {
   answers: PortalAssessmentAttemptAnswer[];
 }
 
+export interface PortalReportCard {
+  studentId: string;
+  studentName: string;
+  batchName: string;
+  batchCode: string;
+  classRank: number | null;
+  classSize: number;
+  overallPercentage: number;
+  overallGrade: string;
+  examPercentage: number | null;
+  assessmentPercentage: number | null;
+  assignmentPercentage: number | null;
+  publishedExamCount: number;
+  finalizedAssessmentCount: number;
+  reviewedAssignmentCount: number;
+  focusAreas: Array<{
+    subjectId: string;
+    subjectName: string;
+    subjectCode: string;
+    combinedPercentage: number | null;
+    message: string;
+  }>;
+  subjectBreakdown: Array<{
+    subjectId: string;
+    subjectName: string;
+    subjectCode: string;
+    examPercentage: number | null;
+    assessmentPercentage: number | null;
+    assignmentPercentage: number | null;
+    combinedPercentage: number | null;
+  }>;
+}
+
+export type PortalActivityFeedKind = "REMINDER" | "ASSIGNMENT_FEEDBACK" | "ASSESSMENT_FEEDBACK" | "RESULT_PUBLISHED";
+
+export interface PortalActivityFeedItem {
+  id: string;
+  kind: PortalActivityFeedKind;
+  title: string;
+  description: string;
+  occurredAt: string;
+  status: string | null;
+  subjectName: string | null;
+  scoreLabel: string | null;
+  actorName: string | null;
+}
+
+export type PortalAcknowledgementKind = "FEE_DUE" | "ASSIGNMENT_FEEDBACK" | "ASSESSMENT_RESULT" | "EXAM_RESULT";
+
+export interface PortalAcknowledgementItem {
+  itemKey: string;
+  kind: PortalAcknowledgementKind;
+  title: string;
+  description: string;
+  occurredAt: string;
+  acknowledgedAt: string | null;
+  actorName: string | null;
+  subjectName: string | null;
+  scoreLabel: string | null;
+}
+
+export interface PortalDocument {
+  id: string;
+  title: string;
+  kind: "UPLOADED" | "GENERATED";
+  category: "ACADEMIC" | "STUDENT_RECORD";
+  fileName: string;
+  mimeType: string;
+  createdAt: string;
+  description: string | null;
+}
+
+export interface PortalAnnouncement {
+  id: string;
+  title: string;
+  body: string;
+  category: string;
+  audience: "STUDENT" | "PARENT" | "BOTH";
+  isPinned: boolean;
+  publishedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface PortalFeePaymentProof {
+  id: string;
+  title: string;
+  notes: string | null;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: "PENDING" | "REVIEWED" | "ACCEPTED" | "REJECTED";
+  submittedAt: string;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+}
+
+export interface PortalFeeRecord {
+  id: string;
+  month: number;
+  year: number;
+  amountDue: number;
+  amountPaid: number;
+  pendingAmount: number;
+  status: string;
+  paidAt: string | null;
+  remarks: string | null;
+  paymentMethod: string | null;
+  proofs: PortalFeePaymentProof[];
+}
+
 export interface AssessmentReviewAnswer {
   id: string;
   questionId: string;
@@ -604,7 +714,98 @@ export interface AssessmentAnalytics {
 }
 
 export type StudentExamResultStatus = "DRAFT" | "PUBLISHED";
+export type AssignmentStatus = "DRAFT" | "PUBLISHED" | "CLOSED";
+export type AssignmentSubmissionStatus = "DRAFT" | "SUBMITTED" | "REVIEWED";
 export type PortalAccountType = "STUDENT" | "PARENT";
+
+export interface AssignmentSubmission {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string | null;
+  status: AssignmentSubmissionStatus;
+  submissionText: string | null;
+  attachmentLinks: string[];
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  feedback: string | null;
+  awardedMarks: number | null;
+  reviewedByTeacherId: string | null;
+  reviewedByTeacherName: string | null;
+}
+
+export interface Assignment {
+  id: string;
+  organizationId: string;
+  organizationName: string;
+  academicSessionId: string | null;
+  academicSessionName: string | null;
+  batchId: string;
+  batchName: string;
+  batchCode: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  teacherId: string | null;
+  teacherName: string | null;
+  title: string;
+  code: string;
+  description: string | null;
+  instructions: string | null;
+  status: AssignmentStatus;
+  maxMarks: number;
+  dueAt: string;
+  allowLateSubmission: boolean;
+  publishedAt: string | null;
+  submissionCount: number;
+  reviewedCount: number;
+  submissions: AssignmentSubmission[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortalAssignmentSubmission {
+  id: string;
+  status: AssignmentSubmissionStatus;
+  submissionText: string | null;
+  attachmentLinks: string[];
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  feedback: string | null;
+  awardedMarks: number | null;
+  reviewedByTeacherName: string | null;
+}
+
+export interface PortalAssignmentListItem {
+  id: string;
+  title: string;
+  code: string;
+  subjectName: string;
+  batchName: string;
+  teacherName: string | null;
+  maxMarks: number;
+  dueAt: string;
+  status: AssignmentStatus;
+  allowLateSubmission: boolean;
+  submission: PortalAssignmentSubmission | null;
+}
+
+export interface PortalAssignmentDetail {
+  id: string;
+  title: string;
+  code: string;
+  description: string | null;
+  instructions: string | null;
+  subjectName: string;
+  batchName: string;
+  teacherName: string | null;
+  maxMarks: number;
+  dueAt: string;
+  status: AssignmentStatus;
+  allowLateSubmission: boolean;
+  canSubmit: boolean;
+  submission: PortalAssignmentSubmission | null;
+}
 
 export interface ExamResultItem {
   id: string;
@@ -985,6 +1186,33 @@ export interface AcademicDashboardSummary {
   totalResults: number;
   publishedResults: number;
   averagePercentage: number;
+}
+
+export interface UnifiedReportCardSubjectPoint {
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  examPercentage: number | null;
+  assessmentPercentage: number | null;
+  assignmentPercentage: number | null;
+  combinedPercentage: number | null;
+}
+
+export interface UnifiedReportCard {
+  studentId: string;
+  studentName: string;
+  batchId: string | null;
+  batchName: string;
+  batchCode: string;
+  overallPercentage: number;
+  overallGrade: string;
+  examPercentage: number | null;
+  assessmentPercentage: number | null;
+  assignmentPercentage: number | null;
+  publishedExamCount: number;
+  finalizedAssessmentCount: number;
+  reviewedAssignmentCount: number;
+  subjectBreakdown: UnifiedReportCardSubjectPoint[];
 }
 
 export interface GradeDistributionPoint {

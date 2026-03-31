@@ -23,9 +23,12 @@ import type {
   ResultStatusPoint,
   StudentBatchDistributionPoint,
   StudentStatusPoint,
+  UnifiedReportCard,
   UserRoleDistributionPoint,
   UserStatusPoint,
 } from "@/types/domain";
+import type { PaginatedResult, PaginationParams } from "@/types/api";
+import { buildQueryParams } from "@/lib/api/query-utils";
 
 export const reportsApi = {
   summary: () => unwrapResponse(apiClient.get<ApiResponse<DashboardSummary>>(endpoints.reports.summary)),
@@ -43,6 +46,10 @@ export const reportsApi = {
     unwrapResponse(apiClient.get<ApiResponse<UserStatusPoint[]>>(endpoints.reports.userStatusSummary)),
   academicSummary: () =>
     unwrapResponse(apiClient.get<ApiResponse<AcademicDashboardSummary>>(endpoints.reports.academicSummary)),
+  unifiedReportCards: (params: PaginationParams) =>
+    unwrapResponse(
+      apiClient.get<ApiResponse<PaginatedResult<UnifiedReportCard>>>(`${endpoints.reports.unifiedReportCards}?${buildQueryParams(params).toString()}`),
+    ),
   gradeDistribution: () =>
     unwrapResponse(apiClient.get<ApiResponse<GradeDistributionPoint[]>>(endpoints.reports.gradeDistribution)),
   examScheduleTrend: () =>

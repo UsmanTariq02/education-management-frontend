@@ -42,6 +42,17 @@ export interface RefreshTokenDto {
 
 export interface PortalRefreshTokenDto extends RefreshTokenDto {}
 
+export interface AcknowledgePortalItemDto {
+  itemKey: string;
+  kind: string;
+  title: string;
+}
+
+export interface CreatePortalFeePaymentProofDto {
+  title: string;
+  notes?: string;
+}
+
 export interface LogoutDto {
   reason?: string;
 }
@@ -291,6 +302,35 @@ export interface CreateExamDto {
 }
 
 export interface UpdateExamDto extends Partial<CreateExamDto> {}
+
+export interface CreateAssignmentDto {
+  academicSessionId?: string;
+  batchId: string;
+  subjectId: string;
+  teacherId?: string;
+  title: string;
+  code: string;
+  description?: string;
+  instructions?: string;
+  status?: "DRAFT" | "PUBLISHED" | "CLOSED";
+  maxMarks?: number;
+  dueAt: string;
+  allowLateSubmission?: boolean;
+  publishedAt?: string;
+}
+
+export interface UpdateAssignmentDto extends Partial<CreateAssignmentDto> {}
+
+export interface ReviewAssignmentSubmissionDto {
+  feedback?: string;
+  awardedMarks?: number;
+  finalize?: boolean;
+}
+
+export interface UpsertPortalAssignmentSubmissionDto {
+  submissionText?: string;
+  attachmentLinks?: string[];
+}
 
 export interface CreateAssessmentQuestionOptionDto {
   text: string;

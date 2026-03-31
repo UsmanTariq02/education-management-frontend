@@ -12,9 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate } from "@/lib/formatters";
 
-export function PortalAssessmentCenter() {
+export function PortalAssessmentCenter({ variant = "student" }: { variant?: "student" | "parent" }) {
   const query = useQuery({
-    queryKey: ["portal-assessments"],
+    queryKey: ["portal-assessments", variant],
     queryFn: portalApi.assessments,
   });
 
@@ -38,14 +38,18 @@ export function PortalAssessmentCenter() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">Student assessments</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">
+            {variant === "parent" ? "Parent assessment monitor" : "Student assessments"}
+          </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Assessment center</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Start quizzes and tests, resume in-progress attempts, and review instant results for auto-graded questions.
+            {variant === "parent"
+              ? "Monitor published quizzes and tests, attempt status, and latest scoring activity for the linked student."
+              : "Start quizzes and tests, resume in-progress attempts, and review instant results for auto-graded questions."}
           </p>
         </div>
         <Button asChild variant="outline">
-          <Link href="/portal/student">Back to portal</Link>
+          <Link href={variant === "parent" ? "/portal/parent" : "/portal/student"}>Back to portal</Link>
         </Button>
       </div>
 
@@ -107,11 +111,13 @@ export function PortalAssessmentCenter() {
                   </p>
                 </div>
               ) : null}
-              <Button asChild className="w-full">
-                <Link href={`/portal/student/assessments/${assessment.id}`}>
-                  {assessment.latestAttempt?.status === "IN_PROGRESS" ? "Resume attempt" : "Open assessment"}
-                </Link>
-              </Button>
+              {variant === "student" ? (
+                <Button asChild className="w-full">
+                  <Link href={`/portal/student/assessments/${assessment.id}`}>
+                    {assessment.latestAttempt?.status === "IN_PROGRESS" ? "Resume attempt" : "Open assessment"}
+                  </Link>
+                </Button>
+              ) : null}
             </CardContent>
           </Card>
         ))}

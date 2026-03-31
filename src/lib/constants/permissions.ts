@@ -29,6 +29,7 @@ export const PERMISSIONS = {
     "online-classes.attendance",
   ],
   exams: ["exams.create", "exams.read", "exams.update", "exams.delete"],
+  assignments: ["assignments.create", "assignments.read", "assignments.update", "assignments.delete"],
   assessments: ["assessments.create", "assessments.read", "assessments.update", "assessments.delete"],
   examResults: ["exam-results.create", "exam-results.read", "exam-results.update", "exam-results.delete"],
   fees: ["fees.create", "fees.read", "fees.update", "fees.delete"],

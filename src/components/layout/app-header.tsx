@@ -29,6 +29,7 @@ const routeTitles: Record<string, string> = {
   "/timetables": "Timetable Planner",
   "/online-classes": "Online Classes",
   "/exams": "Exams Planner",
+  "/assignments": "Assignments Workspace",
   "/exam-results": "Results & Report Cards",
   "/report-cards": "Report Cards",
   "/fee-plans": "Fee Plans",
