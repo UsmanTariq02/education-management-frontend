@@ -43,6 +43,7 @@ const routeTitles: Record<string, string> = {
   "/settings": "Settings",
   "/profile": "Profile",
   "/guide": "User Guide",
+  "/onboarding": "Onboarding Hub",
   "/security": "Security",
   "/alerts": "Alerts",
 };

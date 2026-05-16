@@ -17,19 +17,19 @@ export default function LoginPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-border/70 bg-card/85 p-5 shadow-sm backdrop-blur">
+            <div className="rounded-[1.4rem] border border-border/70 bg-card/85 p-5 shadow-sm backdrop-blur">
               <ShieldCheck className="h-5 w-5 text-primary" />
               <p className="mt-3 font-semibold">Permission-aware by default</p>
               <p className="mt-2 text-sm text-muted-foreground">Routes and actions stay scoped to the user&apos;s role and permissions.</p>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-card/85 p-5 shadow-sm backdrop-blur">
+            <div className="rounded-[1.4rem] border border-border/70 bg-card/85 p-5 shadow-sm backdrop-blur">
               <UsersRound className="h-5 w-5 text-emerald-600" />
               <p className="mt-3 font-semibold">Built for school teams</p>
               <p className="mt-2 text-sm text-muted-foreground">Admins and staff get a simpler workspace with the right surface area.</p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-dashed border-border/70 bg-card/70 p-6 text-sm text-muted-foreground shadow-sm backdrop-blur">
+          <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-card/70 p-6 text-sm text-muted-foreground shadow-sm backdrop-blur">
             <div className="flex items-center gap-3 text-foreground">
               <CheckCircle2 className="h-5 w-5 text-primary" />
               <span className="font-semibold">Demo seed from the backend</span>

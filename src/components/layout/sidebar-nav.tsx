@@ -45,7 +45,7 @@ import { getAiAccessLabel, hasAiAccess } from "@/lib/ai/access";
 import { hasAnyPermission } from "@/lib/permissions/access";
 import { hasRole } from "@/lib/permissions/access";
 import { hasModule } from "@/lib/permissions/access";
-import type { OrganizationModule } from "@/types/auth";
+import type { AuthUser, OrganizationModule } from "@/types/auth";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, permissions: ["reports.read"], section: "operations", module: "REPORTS" as OrganizationModule },
@@ -74,6 +74,13 @@ const navItems = [
   { href: "/ai/admin", label: "AI Admin", icon: BarChart3, permissions: ["ai.use"], roles: ["SUPER_ADMIN"], section: "insights" },
   { href: "/alerts", label: "Alerts", icon: Bell, permissions: ["online-classes.read"], section: "insights", module: "ACADEMICS" as OrganizationModule },
   { href: "/activity-logs", label: "Activity Logs", icon: Logs, permissions: ["activity-logs.read"], section: "insights", module: "ACTIVITY_LOGS" as OrganizationModule },
+  {
+    href: "/onboarding",
+    label: "Onboarding",
+    icon: LifeBuoy,
+    section: "platform",
+    access: (user: AuthUser | null) => hasRole(user, "SUPER_ADMIN") || hasRole(user, "ADMIN"),
+  },
   { href: "/organizations", label: "Organizations", icon: Landmark, permissions: ["users.read"], roles: ["SUPER_ADMIN"], section: "platform" },
   { href: "/roles", label: "Roles", icon: ShieldCheck, permissions: ["users.read"], roles: ["SUPER_ADMIN"], section: "platform" },
   { href: "/permissions", label: "Permissions", icon: Lock, permissions: ["users.read"], roles: ["SUPER_ADMIN"], section: "platform" },
@@ -131,7 +138,13 @@ export function SidebarNav() {
   const visibleNavItems = useMemo(
     () =>
       navItems
-        .filter((item) => hasAnyPermission(user, item.permissions))
+        .filter((item) => {
+          if (item.access) {
+            return item.access(user);
+          }
+
+          return hasAnyPermission(user, item.permissions);
+        })
         .filter((item) => !item.roles || item.roles.some((role) => hasRole(user, role))),
     [user],
   );

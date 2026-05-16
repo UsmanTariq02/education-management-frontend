@@ -9,6 +9,7 @@ import {
   GraduationCap,
   Landmark,
   LayoutDashboard,
+  LifeBuoy,
   Logs,
   Mailbox,
   Search,
@@ -71,6 +72,15 @@ const commandItems: CommandItem[] = [
   { href: "/activity-logs", label: "Activity Logs", description: "Audit user and system actions", icon: Logs, permissions: ["activity-logs.read"], module: "ACTIVITY_LOGS", tone: "sky" },
   { href: "/ai", label: "AI Lab", description: "Draft notices, replies, support answers, and admission extraction", icon: Sparkles, permissions: ["ai.use"], tone: "emerald" },
   { href: "/ai/admin", label: "AI Admin", description: "Monitor queue pressure and AI usage across a tenant", icon: BarChart3, permissions: ["ai.use"], roles: ["SUPER_ADMIN"], tone: "sky" },
+  {
+    href: "/onboarding",
+    label: "Onboarding Hub",
+    description: "Zero-to-hero setup flow for new organizations",
+    icon: LifeBuoy,
+    permissions: [],
+    access: (user) => hasRole(user, "SUPER_ADMIN") || hasRole(user, "ADMIN"),
+    tone: "emerald",
+  },
   {
     href: "/settings",
     label: "Settings",

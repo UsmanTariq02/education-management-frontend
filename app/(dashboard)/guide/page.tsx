@@ -248,15 +248,17 @@ export default function GuidePage() {
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
                 {manual.key === "SUPER_ADMIN" ? (
-                  <p>
-                    Review <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/organizations">Organizations</Link>,{" "}
+                <p>
+                    Start with <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/onboarding">Onboarding Hub</Link> for the full zero-to-hero setup flow, then review{" "}
+                    <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/organizations">Organizations</Link>,{" "}
                     <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/roles">Roles</Link>,{" "}
                     <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/permissions">Permissions</Link>, and{" "}
                     <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/inquiries">Inquiries</Link> first.
-                  </p>
+                </p>
                 ) : manual.key === "ADMIN" ? (
                   <p>
-                    Use <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/students">Students</Link> for admissions and portal provisioning,{" "}
+                    Open <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/onboarding">Onboarding Hub</Link> for the tenant rollout path, then use{" "}
+                    <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/students">Students</Link> for admissions and portal provisioning,{" "}
                     <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/teachers">Teachers</Link> for teacher profiles, and{" "}
                     <Link className="font-medium text-primary underline-offset-4 hover:underline" href="/users">Users</Link> for dashboard access roles.
                   </p>
@@ -292,7 +294,7 @@ export default function GuidePage() {
         <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
           <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
             <p className="font-medium text-foreground">Access roles</p>
-            <p className="mt-2">Use the Users module for admin, academic coordinator, and staff onboarding.</p>
+            <p className="mt-2">Use the Users module for admin, academic coordinator, and staff onboarding. Open the Onboarding Hub first when you are rolling out a new tenant.</p>
           </div>
           <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
             <p className="font-medium text-foreground">Teacher profiles</p>

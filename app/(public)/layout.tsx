@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-20 border-b border-border/70 bg-background/80 backdrop-blur-xl">
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.06),_transparent_24%),linear-gradient(180deg,_hsl(var(--background))_0%,_hsl(var(--muted)/0.24)_100%)]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.55),_transparent_65%)]" />
+      <header className="sticky top-0 z-20 border-b border-border/70 bg-background/70 backdrop-blur-xl">
         <div className="container flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
             <div className="rounded-2xl bg-primary/10 p-2 text-primary shadow-sm shadow-primary/10">
@@ -29,7 +30,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
           </Button>
         </div>
       </header>
-      <div className="flex-1">{children}</div>
+      <div className="relative flex-1">{children}</div>
       <SiteFooter variant="public" />
     </div>
   );
