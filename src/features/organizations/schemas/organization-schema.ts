@@ -17,10 +17,12 @@ export const organizationSchema = z.object({
   subscriptionStartsAt: z.string().optional(),
   subscriptionEndsAt: z.string().optional(),
   subscriptionNotes: z.string().optional(),
+  aiDraftApprovalRequired: z.boolean().default(false),
   userLimit: z.coerce.number().int().min(1, "User limit must be at least 1").default(10),
   studentLimit: z.coerce.number().int().min(1, "Student limit must be at least 1").default(500),
+  openAiApiKey: z.string().optional(),
   enabledModules: z.array(
-    z.enum(["USERS", "STUDENTS", "PORTALS", "BATCHES", "ACADEMICS", "FEES", "ATTENDANCE", "REMINDERS", "REPORTS", "ACTIVITY_LOGS", "SETTINGS", "MEDIA"]),
+    z.enum(["USERS", "STUDENTS", "PORTALS", "BATCHES", "ACADEMICS", "FEES", "ATTENDANCE", "REMINDERS", "MAIL", "REPORTS", "ACTIVITY_LOGS", "SETTINGS", "MEDIA"]),
   ).min(1, "Select at least one enabled module"),
 });
 

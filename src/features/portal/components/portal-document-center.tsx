@@ -44,7 +44,7 @@ export function PortalDocumentCenter({ variant }: { variant: "student" | "parent
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">
             {variant === "parent" ? "Guardian document center" : "Portal document center"}
           </p>
@@ -69,9 +69,9 @@ export function PortalDocumentCenter({ variant }: { variant: "student" | "parent
           <Card key={item.id} className="border-border/70">
             <CardHeader className="space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle>{item.title}</CardTitle>
-                  <CardDescription>{item.fileName}</CardDescription>
+                <div className="min-w-0">
+                  <CardTitle className="break-words">{item.title}</CardTitle>
+                  <CardDescription className="break-words">{item.fileName}</CardDescription>
                 </div>
                 <Badge variant={item.kind === "GENERATED" ? "secondary" : "outline"}>{item.kind}</Badge>
               </div>
@@ -82,7 +82,7 @@ export function PortalDocumentCenter({ variant }: { variant: "student" | "parent
                 <Badge variant="outline">{item.mimeType}</Badge>
                 <Badge variant="outline">{formatDate(item.createdAt, "MMM d, yyyy")}</Badge>
               </div>
-              <p className="text-muted-foreground">{item.description ?? "No additional description available."}</p>
+              <p className="break-words text-muted-foreground">{item.description ?? "No additional description available."}</p>
               <Button onClick={() => handleDownload(item.id, item.fileName)} className="w-full">
                 <Download className="mr-2 h-4 w-4" />
                 Download

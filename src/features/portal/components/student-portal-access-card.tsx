@@ -99,7 +99,7 @@ function PortalAccessBlock({
   isPending: boolean;
 }) {
   return (
-    <div className="rounded-2xl border p-4">
+    <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
       <div className="space-y-2">
         <p className="font-medium">{title}</p>
         <p className="text-sm text-muted-foreground">{email ?? "Email is required before this portal can be activated."}</p>

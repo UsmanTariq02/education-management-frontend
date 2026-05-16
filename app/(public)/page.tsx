@@ -10,12 +10,13 @@ import {
   Quote,
   ShieldCheck,
   UsersRound,
+  WandSparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LandingLoader } from "@/components/feedback/landing-loader";
-import { publicModuleCatalog } from "@/lib/marketing/module-catalog";
+import { publicModuleCatalog, publicModuleCount } from "@/lib/marketing/module-catalog";
 
 const features = [
   {
@@ -29,13 +30,18 @@ const features = [
     icon: BookOpenCheck,
   },
   {
+    title: "AI automation with guardrails",
+    description: "Generate notices, mail drafts, support replies, and admission extraction suggestions before a human approves them.",
+    icon: WandSparkles,
+  },
+  {
     title: "Role-based access control",
     description: "Keep super admin, admin, and staff access clean with permission-aware modules, routes, and actions.",
     icon: ShieldCheck,
   },
   {
     title: "Reporting that supports decisions",
-    description: "Give school owners batch-wise collection, attendance, and reminder performance views that map to real workflows.",
+    description: "Give school owners batch-wise collection, attendance, reminder, and AI workflow views that map to real operations.",
     icon: ChartNoAxesCombined,
   },
 ];
@@ -43,8 +49,8 @@ const features = [
 const trustPoints = [
   "Multi-tenant architecture for multiple schools or colleges",
   "Role and permission security for super admin, admin, and staff",
-  "Twelve public-facing modules covering governance, academics, finance, communication, and documents",
-  "Chart-ready analytics for fees, attendance, reminders, and student activity",
+  `${publicModuleCount} public-facing modules covering governance, academics, finance, communication, automation, and documents`,
+  "Chart-ready analytics for fees, attendance, reminders, student activity, and AI-assisted workflows",
   "CSV student import for faster implementation and migration",
 ];
 
@@ -58,7 +64,7 @@ const faqItems = [
     answer: "Pricing is based on a simple formula: $1 per module per user. Institutions can start with only the modules they need and scale over time.",
   },
   {
-    question: "Can existing student records be migrated?",
+    question: "Can existing student data be migrated?",
     answer: "Yes. The product supports CSV student import with validation and duplicate avoidance to make onboarding cleaner.",
   },
 ];
@@ -75,43 +81,54 @@ const deploymentFits = [
 export default function LandingPage() {
   return (
     <LandingLoader>
-    <main className="bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.08),_transparent_24%),linear-gradient(180deg,_hsl(var(--background))_0%,_hsl(var(--muted)/0.32)_100%)]">
-      <section className="container grid gap-10 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+      <main className="relative isolate overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.08),_transparent_24%),linear-gradient(180deg,_hsl(var(--background))_0%,_hsl(var(--muted)/0.32)_100%)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-[32rem] before:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.7),_transparent_65%)] before:content-['']">
+      <section className="container relative grid gap-10 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
         <div className="space-y-8">
           <Badge className="border-sky-500/20 bg-sky-500/10 text-sky-700 hover:bg-sky-500/10">Built for schools, academies, and institutes</Badge>
           <div className="space-y-5">
             <h1 className="max-w-4xl text-5xl font-semibold tracking-tight md:text-6xl">
-              Run education operations, academics, portals, and online classes from one system.
+              Run education operations, academics, portals, and AI automation from one system.
             </h1>
             <p className="max-w-2xl text-lg text-muted-foreground">
-              EduFlow unifies student records, fee operations, attendance, teachers, timetables, exams, portals, online classes, and reporting in one operational platform.
+              EduFlow unifies student data, fee operations, attendance, teachers, timetables, exams, portals, online classes, reporting, and guarded AI workflows in one operational platform.
+              The AI layer reduces repetitive admin work so teams can stay leaner without losing control.
             </p>
           </div>
           <div className="flex flex-wrap gap-4">
             <Button asChild size="lg">
               <Link href="/login">
-                Launch dashboard
+                Open dashboard
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <Link href="/pricing">View pricing</Link>
+              <Link href="/pricing">See pricing</Link>
             </Button>
           </div>
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Common deployments</p>
+            <div className="flex flex-wrap gap-2">
+              {deploymentFits.map((item) => (
+                <span key={item} className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-sm shadow-sm">
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Card className="bg-card/80">
+            <Card className="border-border/70 bg-card/85 shadow-sm shadow-slate-900/5 backdrop-blur">
               <CardContent className="p-5">
-                <p className="text-3xl font-semibold">98%</p>
-                <p className="text-sm text-muted-foreground">Collection visibility across current month dues</p>
+                <p className="text-3xl font-semibold">{publicModuleCount}</p>
+                <p className="text-sm text-muted-foreground">Public modules across the platform surface</p>
               </CardContent>
             </Card>
-            <Card className="bg-card/80">
+            <Card className="border-border/70 bg-card/85 shadow-sm shadow-slate-900/5 backdrop-blur">
               <CardContent className="p-5">
-                <p className="text-3xl font-semibold">4x</p>
-                <p className="text-sm text-muted-foreground">Faster attendance review by batch and day</p>
+                <p className="text-3xl font-semibold">AI</p>
+                <p className="text-sm text-muted-foreground">Draft notices, support replies, and admission extracts so staff spend less time on repetitive work</p>
               </CardContent>
             </Card>
-            <Card className="bg-card/80">
+            <Card className="border-border/70 bg-card/85 shadow-sm shadow-slate-900/5 backdrop-blur">
               <CardContent className="p-5">
                 <p className="text-3xl font-semibold">RBAC</p>
                 <p className="text-sm text-muted-foreground">Permission-aware navigation and actions</p>
@@ -119,35 +136,92 @@ export default function LandingPage() {
             </Card>
           </div>
         </div>
-        <Card className="overflow-hidden border-slate-200 bg-slate-950 text-slate-50 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.85)]">
+        <Card className="overflow-hidden border-slate-200 bg-slate-950 text-slate-50 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.85)] ring-1 ring-white/5">
           <CardContent className="p-0">
-            <div className="grid gap-0 md:grid-cols-[220px_1fr]">
-              <div className="border-b border-slate-800 bg-slate-900 p-5 md:border-b-0 md:border-r">
-                <p className="text-sm font-semibold text-slate-200">Operations Snapshot</p>
+            <div className="grid gap-0 lg:grid-cols-[250px_minmax(0,1fr)]">
+              <div className="border-b border-slate-800 bg-slate-900/95 p-5 md:border-b-0 md:border-r">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Operations Snapshot</p>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  A quick view of finance, attendance, automation, and access control inside one governed platform, built to help a small team handle more work.
+                </p>
                 <div className="mt-6 space-y-3 text-sm text-slate-400">
-                  <div className="rounded-xl bg-slate-800 px-3 py-2">Overdue fees</div>
-                  <div className="rounded-xl bg-slate-800/60 px-3 py-2">Attendance trends</div>
-                  <div className="rounded-xl bg-slate-800/60 px-3 py-2">Reminder delivery logs</div>
-                  <div className="rounded-xl bg-slate-800/60 px-3 py-2">Role-based access</div>
+                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-800 px-3 py-3 shadow-sm">
+                    <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-sky-300" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-100">Overdue fees</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">Track dues and collections pressure.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-800/70 px-3 py-3 shadow-sm">
+                    <BookOpenCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-100">Attendance trends</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">See patterns by batch and day.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-800/70 px-3 py-3 shadow-sm">
+                    <WandSparkles className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-100">AI draft approval queue</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">Review notices and replies before publishing, instead of drafting everything from scratch.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-800/70 px-3 py-3 shadow-sm">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-100">Role-based access</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">Keep admin and staff actions separate.</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-4 p-5">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="rounded-2xl bg-sky-500/15 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-sky-300">Collected</p>
-                    <p className="mt-3 text-2xl font-semibold">$24,800</p>
-                  </div>
-                  <div className="rounded-2xl bg-amber-500/15 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-amber-300">Overdue</p>
-                    <p className="mt-3 text-2xl font-semibold">29 records</p>
-                  </div>
-                  <div className="rounded-2xl bg-emerald-500/15 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">Present</p>
-                    <p className="mt-3 text-2xl font-semibold">412 today</p>
+              <div className="min-w-0 space-y-5 p-5">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-4">
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Current view</p>
+                      <p className="mt-1 text-sm font-medium text-slate-100">Today&apos;s operational pulse</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {["Fees", "Attendance", "AI", "Access"].map((chip) => (
+                        <span key={chip} className="rounded-full border border-white/10 bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300">
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-slate-800">
-                  <div className="grid grid-cols-4 gap-2 border-b border-slate-800 px-4 py-3 text-xs uppercase tracking-[0.2em] text-slate-500">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="rounded-2xl border border-sky-500/15 bg-sky-500/10 p-4 shadow-sm">
+                    <p className="text-xs uppercase tracking-[0.2em] text-sky-300">Collected</p>
+                    <p className="mt-3 text-2xl font-semibold text-slate-50">$24,800</p>
+                    <p className="mt-2 text-xs text-slate-400">Current month collections</p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-500/15 bg-amber-500/10 p-4 shadow-sm">
+                    <p className="text-xs uppercase tracking-[0.2em] text-amber-300">Overdue</p>
+                    <p className="mt-3 text-2xl font-semibold text-slate-50">29 fees</p>
+                    <p className="mt-2 text-xs text-slate-400">Needs follow-up this cycle</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/10 p-4 shadow-sm">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">Present</p>
+                    <p className="mt-3 text-2xl font-semibold text-slate-50">412 today</p>
+                    <p className="mt-2 text-xs text-slate-400">Attendance recorded across batches</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {[
+                    { label: "Notices", value: "AI drafted" },
+                    { label: "Mail", value: "AI assisted" },
+                    { label: "Admissions", value: "Auto extracted" },
+                  ].map((item) => (
+                    <div key={item.label} className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
+                      <p className="mt-2 break-words text-sm font-medium leading-5 text-slate-100">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/40">
+                  <div className="hidden gap-2 border-b border-slate-800 px-4 py-3 text-xs uppercase tracking-[0.2em] text-slate-500 sm:grid sm:grid-cols-[minmax(0,1.35fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)]">
                     <span>Student</span>
                     <span>Batch</span>
                     <span>Status</span>
@@ -155,11 +229,23 @@ export default function LandingPage() {
                   </div>
                   <div className="space-y-1 p-2 text-sm">
                     {["Ayesha Khan", "Hamza Ali", "Sara Ahmed"].map((name, index) => (
-                      <div key={name} className="grid grid-cols-4 rounded-xl px-3 py-3 hover:bg-slate-900">
-                        <span>{name}</span>
-                        <span>Batch {index + 6}</span>
-                        <span className="text-amber-300">Overdue</span>
-                        <span>${420 + index * 20}</span>
+                      <div key={name} className="grid gap-2 rounded-2xl px-3 py-3 transition hover:bg-slate-900 sm:grid-cols-[minmax(0,1.35fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)]">
+                        <div className="sm:contents">
+                          <span className="text-[11px] uppercase tracking-[0.18em] text-slate-500 sm:hidden">Student</span>
+                          <span className="min-w-0 break-words">{name}</span>
+                        </div>
+                        <div className="sm:contents">
+                          <span className="text-[11px] uppercase tracking-[0.18em] text-slate-500 sm:hidden">Batch</span>
+                          <span className="min-w-0 break-words">Batch {index + 6}</span>
+                        </div>
+                        <div className="sm:contents">
+                          <span className="text-[11px] uppercase tracking-[0.18em] text-slate-500 sm:hidden">Status</span>
+                          <span className="min-w-0 break-words text-amber-300">Overdue</span>
+                        </div>
+                        <div className="sm:contents">
+                          <span className="text-[11px] uppercase tracking-[0.18em] text-slate-500 sm:hidden">Amount due</span>
+                          <span className="min-w-0 break-words">${420 + index * 20}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -171,11 +257,11 @@ export default function LandingPage() {
       </section>
 
       <section className="container pb-4">
-        <div className="grid gap-4 rounded-[2rem] border bg-card/80 p-6 backdrop-blur md:grid-cols-4">
+        <div className="grid gap-4 rounded-[2rem] border border-border/70 bg-card/80 p-6 shadow-sm backdrop-blur md:grid-cols-4">
           {[
             { title: "Academic operations", detail: "Teachers, subjects, timetables, exams, and results in one flow." },
             { title: "Parent connectivity", detail: "Student and parent portals with fees, attendance, reminders, and results." },
-            { title: "Online learning", detail: "Scheduled online classes with attendance-linked workflows." },
+            { title: "AI automation", detail: "Notices, support replies, admissions, and interventions are drafted with human approval so staff do less manual writing." },
             { title: "Governed SaaS", detail: "Multi-tenant controls, modules, limits, and permission-aware access." },
           ].map((item) => (
             <div key={item.title} className="rounded-2xl border bg-background/70 p-4">
@@ -191,14 +277,14 @@ export default function LandingPage() {
           <p className="text-sm font-medium uppercase tracking-[0.24em] text-primary">Platform coverage</p>
           <h2 className="text-3xl font-semibold tracking-tight">A practical product surface for education teams</h2>
           <p className="text-muted-foreground">
-            The product is designed around operational tables, auditability, and role-aware workflows rather than decorative dashboards.
+            The product is designed around operational tables, auditability, role-aware workflows, and AI-assisted automation that cuts repetitive admin load rather than decorative dashboards.
           </p>
         </div>
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {features.map((feature) => {
             const Icon = feature.icon;
             return (
-              <Card key={feature.title}>
+              <Card key={feature.title} className="border-border/70 bg-card/85 shadow-sm backdrop-blur transition hover:-translate-y-1 hover:shadow-lg">
                 <CardHeader>
                   <div className="mb-3 inline-flex rounded-2xl bg-primary/10 p-3 text-primary">
                     <Icon className="h-5 w-5" />
@@ -215,14 +301,14 @@ export default function LandingPage() {
       <section className="container py-16">
         <div className="mb-8 max-w-3xl space-y-3">
           <p className="text-sm font-medium uppercase tracking-[0.24em] text-primary">Full module catalog</p>
-          <h2 className="text-3xl font-semibold tracking-tight">All modules available for public SaaS positioning</h2>
+          <h2 className="text-3xl font-semibold tracking-tight">All {publicModuleCount} modules available for public SaaS positioning</h2>
           <p className="text-muted-foreground">
             Buyers should be able to see the full product scope immediately, from governance and admissions to academics, finance, portals, reporting, and auditability.
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {publicModuleCatalog.map((module) => (
-            <Card key={module.key}>
+            <Card key={module.key} className="border-border/70 bg-card/85 shadow-sm backdrop-blur transition hover:-translate-y-1 hover:shadow-lg">
               <CardHeader>
                 <CardTitle className="text-xl">{module.title}</CardTitle>
                 <CardDescription>{module.description}</CardDescription>
@@ -234,17 +320,17 @@ export default function LandingPage() {
 
       <section className="container grid gap-6 py-16 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Attendance and reporting</CardTitle>
-            <CardDescription>Use cohort-level trends, attendance distribution, and recent exceptions to take action quickly.</CardDescription>
-          </CardHeader>
+            <CardHeader>
+              <CardTitle>Attendance and reporting</CardTitle>
+              <CardDescription>Use cohort-level trends, attendance distribution, and recent exceptions to take action quickly.</CardDescription>
+            </CardHeader>
           <CardContent className="space-y-4">
             {[
               "Daily attendance entry with present, absent, late, and leave statuses",
-              "Recent attendance records table for fast review",
+              "Recent attendance ledger for fast review",
               "Batch-wise attendance summaries for reporting",
             ].map((item) => (
-              <div key={item} className="flex items-start gap-3 rounded-xl bg-muted/70 p-4">
+              <div key={item} className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/70 p-4 shadow-sm">
                 <UsersRound className="mt-0.5 h-4 w-4 text-primary" />
                 <p className="text-sm">{item}</p>
               </div>
@@ -258,11 +344,11 @@ export default function LandingPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {[
-              "SMS, WhatsApp, email, and manual reminders in a unified log",
-              "Overdue fee follow-ups tied to actual fee records",
+              "SMS, WhatsApp, email, and manual reminders in a unified history",
+              "Overdue fee follow-ups tied to actual fee ledger entries",
               "Reminder activity visible to admins and assigned staff",
             ].map((item) => (
-              <div key={item} className="flex items-start gap-3 rounded-xl bg-muted/70 p-4">
+              <div key={item} className="flex items-start gap-3 rounded-2xl border border-border/70 bg-muted/70 p-4 shadow-sm">
                 <Bell className="mt-0.5 h-4 w-4 text-primary" />
                 <p className="text-sm">{item}</p>
               </div>
@@ -278,7 +364,7 @@ export default function LandingPage() {
             { title: "Modular rollout", price: "Flexible", description: "Start with only the modules your institution needs today." },
             { title: "Scale-ready", price: "Tenant-aware", description: "Expand users, modules, and organizations without changing platforms." },
           ].map((plan) => (
-            <Card key={plan.title} className={plan.title === "Modular rollout" ? "border-primary shadow-lg" : ""}>
+            <Card key={plan.title} className={plan.title === "Modular rollout" ? "border-primary shadow-lg shadow-primary/10" : "shadow-sm"}>
               <CardHeader>
                 <CardTitle>{plan.title}</CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
@@ -286,7 +372,7 @@ export default function LandingPage() {
               <CardContent className="space-y-6">
                 <p className="text-4xl font-semibold">{plan.price}</p>
                 <Button asChild className="w-full" variant={plan.title === "Modular rollout" ? "default" : "outline"}>
-                  <Link href="/pricing">View pricing model</Link>
+              <Link href="/pricing">See pricing model</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -302,7 +388,7 @@ export default function LandingPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {trustPoints.map((item) => (
-              <div key={item} className="flex items-start gap-3 rounded-xl border p-4 text-sm">
+              <div key={item} className="flex items-start gap-3 rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
                 <p>{item}</p>
               </div>
@@ -313,7 +399,7 @@ export default function LandingPage() {
           <CardHeader>
             <CardTitle>What buyers usually respond to</CardTitle>
             <CardDescription className="text-slate-300">
-              Clear governance, modular rollout, and pricing that is easy to defend internally.
+              Clear governance, modular rollout, AI support that lowers repetitive work, and pricing that is easy to defend internally.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
@@ -337,6 +423,11 @@ export default function LandingPage() {
               <p className="mt-3 font-semibold">Decision-ready reporting</p>
               <p className="mt-2 text-sm text-slate-300">Charts and summaries help leadership review actual performance quickly.</p>
             </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+              <WandSparkles className="h-5 w-5 text-amber-300" />
+              <p className="mt-3 font-semibold">Lean operations with AI</p>
+              <p className="mt-2 text-sm text-slate-300">AI drafts and extraction reduce the load on small teams, so they can handle more without adding manual staff too early.</p>
+            </div>
           </CardContent>
         </Card>
       </section>
@@ -348,11 +439,11 @@ export default function LandingPage() {
               <Quote className="h-5 w-5" />
             </div>
             <CardTitle>Designed for stronger sales conversations</CardTitle>
-            <CardDescription>The public pages now communicate product fit, pricing logic, and rollout readiness more clearly.</CardDescription>
+            <CardDescription>The public pages now communicate product fit, pricing logic, rollout readiness, and workload reduction more clearly.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             <p>EduFlow is positioned as a governed operations platform, not a generic school CRM. That distinction matters when speaking with decision makers who care about finance discipline, role control, and multi-organization growth.</p>
-            <p>The commercial model is also deliberately simple: $1 per module per user. It is easy to explain, easier to quote, and easier for institutions to compare against their own operational footprint.</p>
+                <p>The commercial model is also deliberately simple: $1 per module per user. It is easy to explain, easier to quote, and easier for institutions to compare against their own operational footprint.</p>
           </CardContent>
         </Card>
         <Card>
@@ -362,7 +453,7 @@ export default function LandingPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {faqItems.map((item) => (
-              <div key={item.question} className="rounded-xl border p-4">
+              <div key={item.question} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                 <p className="font-medium">{item.question}</p>
                 <p className="mt-2 text-sm text-muted-foreground">{item.answer}</p>
               </div>
@@ -381,7 +472,7 @@ export default function LandingPage() {
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
             {deploymentFits.map((item) => (
-              <div key={item} className="rounded-full border bg-background px-4 py-2 text-sm font-medium">
+              <div key={item} className="rounded-full border border-border/70 bg-background px-4 py-2 text-sm font-medium shadow-sm">
                 {item}
               </div>
             ))}
@@ -397,7 +488,7 @@ export default function LandingPage() {
               <h2 className="mt-2 text-3xl font-semibold">Move school operations into a product your team can actually use.</h2>
             </div>
             <Button asChild variant="secondary" size="lg">
-              <Link href="/login">Open the workspace</Link>
+              <Link href="/login">Enter the workspace</Link>
             </Button>
           </CardContent>
         </Card>

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
@@ -31,11 +32,13 @@ import {
   UserRound,
 } from "lucide-react";
 import { attendanceApi } from "@/features/attendance/api/attendance-api";
+import { aiApi } from "@/features/ai/api/ai-api";
 import { feesApi } from "@/features/fees/api/fees-api";
 import { StudentDocumentsCard } from "@/features/media/components/student-documents-card";
 import { StudentPortalAccessCard } from "@/features/portal/components/student-portal-access-card";
 import { remindersApi } from "@/features/reminders/api/reminders-api";
 import { studentsApi } from "@/features/students/api/students-api";
+import { writePortalSession } from "@/lib/auth/portal-session";
 import { BoxPlotSummary } from "@/components/charts/box-plot-summary";
 import { MetricCard } from "@/components/cards/metric-card";
 import { ChartCard } from "@/components/charts/chart-card";
@@ -48,13 +51,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { getChartColor } from "@/lib/constants/chart-colors";
 import { formatCurrency, formatDate } from "@/lib/formatters";
+import { normalizeApiError } from "@/lib/api/errors";
 import { usePermission } from "@/hooks/use-permission";
 import { useAuth } from "@/providers/auth-provider";
+import { hasAiAccess } from "@/lib/ai/access";
+import { toast } from "sonner";
+import type { AiStudentRiskRecommendation } from "@/types/domain";
 
 const attendanceOrder = ["PRESENT", "ABSENT", "LATE", "LEAVE"] as const;
 
 export default function StudentDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const studentId = params?.id ?? "";
   const { user } = useAuth();
   const canReadFees = usePermission("fees.read");
@@ -64,6 +72,8 @@ export default function StudentDetailPage() {
   const canReadStudentDocuments = usePermission("student-documents.read");
   const portalsEnabled = user?.enabledModules.includes("PORTALS") ?? false;
   const mediaEnabled = user?.enabledModules.includes("MEDIA") ?? false;
+  const aiReady = hasAiAccess(user);
+  const [aiRiskRecommendation, setAiRiskRecommendation] = useState<AiStudentRiskRecommendation | null>(null);
 
   const studentQuery = useQuery({
     queryKey: ["student", studentId],
@@ -84,6 +94,61 @@ export default function StudentDetailPage() {
     queryKey: ["student", studentId, "reminders"],
     queryFn: () => remindersApi.list({ page: 1, limit: 100 }),
     enabled: Boolean(studentId) && canReadReminders,
+  });
+
+  const openStudentPortalMutation = useMutation({
+    mutationFn: () => studentsApi.portalLogin(studentId),
+    onSuccess: (response) => {
+      writePortalSession(response);
+      toast.success("Student portal session started");
+      router.push("/portal/student");
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const openParentPortalMutation = useMutation({
+    mutationFn: () => studentsApi.parentPortalLogin(studentId),
+    onSuccess: (response) => {
+      writePortalSession(response);
+      toast.success("Parent portal session started");
+      router.push("/portal/parent");
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const studentRiskRecommendationMutation = useMutation({
+    mutationFn: async () =>
+      aiApi.generateStudentRiskRecommendation({
+        studentName: student.fullName,
+        context: buildStudentRiskContext({
+          studentName: student.fullName,
+          organizationName: student.organizationName,
+          studentEmail: student.email,
+          guardianName: student.guardianName,
+          guardianEmail: student.guardianEmail,
+          guardianPhone: student.guardianPhone,
+          studentStatus: student.status,
+          batches: student.batches.map((batch) => batch.name),
+          totalFee,
+          paidFee,
+          pendingFee,
+          outstandingRecords,
+          lastPaymentDate,
+          attendanceRate,
+          attendanceBreakdown,
+          reminderStats,
+          latestPercentage,
+          resultSpread,
+          riskScore,
+          riskLevel,
+          riskReasons,
+        }),
+      }),
+    onSuccess: (data) => {
+      setAiRiskRecommendation(data);
+      toast.success("AI recommendations generated");
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
   });
 
   if (
@@ -189,14 +254,38 @@ export default function StudentDetailPage() {
         eyebrow="Student dashboard"
         title={student.fullName}
         description="Review student profile, fee position, attendance health, guardian contact details, and reminder activity from one operational view."
-        actions={
+      />
+      <div className="sticky top-0 z-20 rounded-[1.75rem] border border-border/70 bg-card/95 px-4 py-3 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Student actions</span>
+            <span>Keep edit and portal access close at hand.</span>
+          </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
               <Link href="/students">Back to students</Link>
             </Button>
+            {user?.roles.includes("SUPER_ADMIN") ? (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => openStudentPortalMutation.mutate()}
+                  disabled={openStudentPortalMutation.isPending || !student.email}
+                >
+                  Open student portal
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => openParentPortalMutation.mutate()}
+                  disabled={openParentPortalMutation.isPending || !student.guardianEmail}
+                >
+                  Open parent portal
+                </Button>
+              </>
+            ) : null}
           </div>
-        }
-      />
+        </div>
+      </div>
 
       <OrganizationScopeBanner moduleLabel="Student detail operations" />
 
@@ -253,7 +342,7 @@ export default function StudentDetailPage() {
             <InfoRow label="Guardian phone" value={student.guardianPhone} icon={<Phone className="h-4 w-4" />} />
             <InfoRow label="Guardian email" value={student.guardianEmail ?? "Not provided"} icon={<Mail className="h-4 w-4" />} />
             <InfoRow label="Admission date" value={formatDate(student.admissionDate)} icon={<CalendarCheck2 className="h-4 w-4" />} />
-            <div className="md:col-span-2 rounded-2xl border p-4">
+            <div className="md:col-span-2 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Status and batches</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Badge variant={student.status === "ACTIVE" ? "success" : "warning"}>{student.status}</Badge>
@@ -375,6 +464,68 @@ export default function StudentDetailPage() {
             ) : (
               <EmptyBlock message="No current risk signals are active for this student." />
             )}
+            <div className="rounded-2xl border border-border/70 bg-background/80 p-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">AI recommendations</p>
+                  <p className="text-xs text-muted-foreground">
+                    Generate a staff-ready summary, next actions, and a suggested parent message from the current student risk context.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => studentRiskRecommendationMutation.mutate()}
+                  disabled={studentRiskRecommendationMutation.isPending || !aiReady}
+                >
+                  {studentRiskRecommendationMutation.isPending ? "Generating..." : "Generate AI recommendations"}
+                </Button>
+              </div>
+              {!aiReady ? (
+                <p className="mt-3 text-xs text-amber-700">AI access is not enabled for this account. Add a tenant key or use the trial AI window to enable recommendations.</p>
+              ) : null}
+              {aiRiskRecommendation ? (
+                <div className="mt-4 space-y-4">
+                  <SummaryRow label="AI risk level" value={aiRiskRecommendation.riskLevel} />
+                  <SummaryRow label="Confidence" value={`${Math.round(aiRiskRecommendation.confidence * 100)}%`} />
+                  <div className="rounded-2xl border bg-muted/30 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Overview</p>
+                    <p className="mt-2 text-sm text-foreground">{aiRiskRecommendation.overview}</p>
+                  </div>
+                  <div className="rounded-2xl border bg-muted/30 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Key signals</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {aiRiskRecommendation.keySignals.map((signal) => (
+                        <Badge key={signal} variant="outline">
+                          {signal}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border bg-muted/30 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recommended actions</p>
+                    <div className="mt-3 space-y-2">
+                      {aiRiskRecommendation.recommendedActions.map((action) => (
+                        <p key={action} className="rounded-2xl border border-border/70 bg-background px-3 py-2 text-sm shadow-sm">
+                          {action}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border bg-muted/30 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Suggested parent message</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{aiRiskRecommendation.parentMessageDraft}</p>
+                  </div>
+                  <div className="rounded-2xl border bg-muted/30 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Staff note</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{aiRiskRecommendation.staffNote}</p>
+                    <Badge className="mt-3" variant={aiRiskRecommendation.escalationNeeded ? "warning" : "success"}>
+                      {aiRiskRecommendation.escalationNeeded ? "Escalation recommended" : "No escalation required"}
+                    </Badge>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -447,7 +598,7 @@ export default function StudentDetailPage() {
               <EmptyBlock message="Fee records are unavailable for your current access level." />
             ) : recentFeeRows.length ? (
               recentFeeRows.map((record) => (
-                <div key={record.id} className="rounded-2xl border p-4">
+                <div key={record.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-medium">
@@ -480,7 +631,7 @@ export default function StudentDetailPage() {
               <EmptyBlock message="Attendance records are unavailable for your current access level." />
             ) : recentAttendanceRows.length ? (
               recentAttendanceRows.map((record) => (
-                <div key={record.id} className="rounded-2xl border p-4">
+                <div key={record.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-medium">{formatDate(record.attendanceDate)}</p>
@@ -510,7 +661,7 @@ export default function StudentDetailPage() {
             <EmptyBlock message="Reminder history is unavailable for your current access level." />
           ) : recentReminderRows.length ? (
             recentReminderRows.map((record) => (
-              <div key={record.id} className="rounded-2xl border p-4">
+              <div key={record.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -537,7 +688,7 @@ export default function StudentDetailPage() {
 
 function InfoRow({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
   return (
-    <div className="rounded-2xl border p-4">
+    <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
         {icon}
         {label}
@@ -549,7 +700,7 @@ function InfoRow({ label, value, icon }: { label: string; value: string; icon: R
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border px-4 py-3">
+    <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-3 shadow-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{value}</span>
     </div>
@@ -558,4 +709,71 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 function EmptyBlock({ message }: { message: string }) {
   return <div className="rounded-2xl border bg-muted/30 p-6 text-sm text-muted-foreground">{message}</div>;
+}
+
+function buildStudentRiskContext({
+  studentName,
+  organizationName,
+  studentEmail,
+  guardianName,
+  guardianEmail,
+  guardianPhone,
+  studentStatus,
+  batches,
+  totalFee,
+  paidFee,
+  pendingFee,
+  outstandingRecords,
+  lastPaymentDate,
+  attendanceRate,
+  attendanceBreakdown,
+  reminderStats,
+  latestPercentage,
+  resultSpread,
+  riskScore,
+  riskLevel,
+  riskReasons,
+}: {
+  studentName: string;
+  organizationName: string;
+  studentEmail: string | null;
+  guardianName: string;
+  guardianEmail: string | null;
+  guardianPhone: string;
+  studentStatus: string;
+  batches: string[];
+  totalFee: number;
+  paidFee: number;
+  pendingFee: number;
+  outstandingRecords: number;
+  lastPaymentDate: string | null;
+  attendanceRate: number;
+  attendanceBreakdown: Array<{ status: string; total: number }>;
+  reminderStats: { sent: number; failed: number; total: number };
+  latestPercentage: number | null;
+  resultSpread: { min: number; q1: number; median: number; q3: number; max: number } | null;
+  riskScore: number;
+  riskLevel: string;
+  riskReasons: string[];
+}) {
+  return [
+    `Student: ${studentName}`,
+    `Organization: ${organizationName}`,
+    `Student status: ${studentStatus}`,
+    `Student email: ${studentEmail ?? "Not provided"}`,
+    `Guardian: ${guardianName}`,
+    `Guardian email: ${guardianEmail ?? "Not provided"}`,
+    `Guardian phone: ${guardianPhone}`,
+    `Batches: ${batches.length ? batches.join(", ") : "None"}`,
+    `Fee summary: total billed ${formatCurrency(totalFee)}, paid ${formatCurrency(paidFee)}, pending ${formatCurrency(pendingFee)}, outstanding records ${outstandingRecords}, last payment ${formatDate(lastPaymentDate)}`,
+    `Attendance summary: rate ${attendanceRate}%, breakdown ${attendanceBreakdown.map((item) => `${item.status}=${item.total}`).join(", ")}`,
+    `Reminder summary: sent ${reminderStats.sent}, failed ${reminderStats.failed}, total ${reminderStats.total}`,
+    `Academic summary: latest percentage ${latestPercentage !== null ? `${latestPercentage}%` : "Not available"}`,
+    resultSpread
+      ? `Academic spread: min ${resultSpread.min.toFixed(1)}%, q1 ${resultSpread.q1.toFixed(1)}%, median ${resultSpread.median.toFixed(1)}%, q3 ${resultSpread.q3.toFixed(1)}%, max ${resultSpread.max.toFixed(1)}%`
+      : "Academic spread: Not available",
+    `Risk score: ${riskScore}/100`,
+    `Risk level: ${riskLevel}`,
+    `Risk reasons: ${riskReasons.length ? riskReasons.join("; ") : "None"}`,
+  ].join("\n");
 }

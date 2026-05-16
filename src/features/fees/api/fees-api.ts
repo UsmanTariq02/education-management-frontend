@@ -2,8 +2,8 @@ import { apiClient, unwrapResponse } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import { buildQueryParams } from "@/lib/api/query-utils";
 import type { ApiResponse, PaginatedResult, PaginationParams } from "@/types/api";
-import type { CreateFeePlanDto, CreateFeeRecordDto, UpdateFeeRecordDto } from "@/types/dto";
-import type { FeePlan, FeeRecord } from "@/types/domain";
+import type { BulkDeleteDto, CreateFeePlanDto, CreateFeeRecordDto, UpdateFeeRecordDto } from "@/types/dto";
+import type { FeeEscalationAutomationSummary, FeePlan, FeeRecord } from "@/types/domain";
 
 export const feesApi = {
   listPlans: (params: PaginationParams) =>
@@ -22,4 +22,10 @@ export const feesApi = {
     unwrapResponse(apiClient.patch<ApiResponse<FeeRecord>>(endpoints.fees.recordDetail(id), payload)),
   removeRecord: (id: string) =>
     unwrapResponse(apiClient.delete<ApiResponse<{ deleted: boolean }>>(endpoints.fees.recordDetail(id))),
+  bulkRemoveRecords: (ids: string[]) =>
+    unwrapResponse(
+      apiClient.post<ApiResponse<{ deletedCount: number }>>(endpoints.fees.bulkDeleteRecords, { ids } satisfies BulkDeleteDto),
+    ),
+  processEscalations: () =>
+    unwrapResponse(apiClient.post<ApiResponse<FeeEscalationAutomationSummary>>(endpoints.fees.processEscalations, {})),
 };

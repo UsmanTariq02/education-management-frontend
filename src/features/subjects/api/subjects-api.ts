@@ -2,7 +2,7 @@ import { apiClient, unwrapResponse } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import { buildQueryParams } from "@/lib/api/query-utils";
 import type { ApiResponse, PaginatedResult, PaginationParams } from "@/types/api";
-import type { CreateSubjectDto, UpdateSubjectDto } from "@/types/dto";
+import type { BulkDeleteDto, CreateSubjectDto, UpdateSubjectDto } from "@/types/dto";
 import type { Subject } from "@/types/domain";
 
 export const subjectsApi = {
@@ -16,4 +16,8 @@ export const subjectsApi = {
     unwrapResponse(apiClient.patch<ApiResponse<Subject>>(endpoints.subjects.detail(id), payload)),
   remove: (id: string) =>
     unwrapResponse(apiClient.delete<ApiResponse<{ deleted: boolean }>>(endpoints.subjects.detail(id))),
+  bulkRemove: (ids: string[]) =>
+    unwrapResponse(apiClient.post<ApiResponse<{ deletedCount: number }>>(endpoints.subjects.bulkDelete, { ids } satisfies BulkDeleteDto)),
+  bulkUpdateStatus: (ids: string[], isActive: boolean) =>
+    unwrapResponse(apiClient.post<ApiResponse<{ updatedCount: number }>>(endpoints.subjects.bulkStatus, { ids, isActive })),
 };

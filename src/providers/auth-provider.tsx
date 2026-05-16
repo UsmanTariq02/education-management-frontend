@@ -32,6 +32,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsHydrated(true);
   }, []);
 
+  useEffect(() => {
+    if (!isHydrated || !session?.accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncCurrentUser = async () => {
+      try {
+        const user = await authApi.me();
+        if (cancelled) return;
+
+        setSession({
+          ...session,
+          user,
+        });
+      } catch {
+        if (cancelled) return;
+        setSession(null);
+        router.replace("/login");
+      }
+    };
+
+    void syncCurrentUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHydrated, router, session?.accessToken]);
+
   const setSession = (nextSession: SessionState | null) => {
     const shouldResetQueries =
       session?.user.id !== nextSession?.user.id ||

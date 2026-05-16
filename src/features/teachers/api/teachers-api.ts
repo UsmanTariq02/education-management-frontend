@@ -2,7 +2,7 @@ import { apiClient, unwrapResponse } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import { buildQueryParams } from "@/lib/api/query-utils";
 import type { ApiResponse, PaginatedResult, PaginationParams } from "@/types/api";
-import type { CreateTeacherDto, UpdateTeacherDto } from "@/types/dto";
+import type { BulkDeleteDto, CreateTeacherDto, UpdateTeacherDto } from "@/types/dto";
 import type { Teacher } from "@/types/domain";
 
 export const teachersApi = {
@@ -16,4 +16,8 @@ export const teachersApi = {
     unwrapResponse(apiClient.patch<ApiResponse<Teacher>>(endpoints.teachers.detail(id), payload)),
   remove: (id: string) =>
     unwrapResponse(apiClient.delete<ApiResponse<{ deleted: boolean }>>(endpoints.teachers.detail(id))),
+  bulkRemove: (ids: string[]) =>
+    unwrapResponse(apiClient.post<ApiResponse<{ deletedCount: number }>>(endpoints.teachers.bulkDelete, { ids } satisfies BulkDeleteDto)),
+  bulkUpdateStatus: (ids: string[], isActive: boolean) =>
+    unwrapResponse(apiClient.post<ApiResponse<{ updatedCount: number }>>(endpoints.teachers.bulkStatus, { ids, isActive })),
 };

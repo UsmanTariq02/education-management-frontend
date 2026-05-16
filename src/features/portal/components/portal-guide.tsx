@@ -114,7 +114,7 @@ export function PortalGuide({ variant }: { variant: "student" | "parent" }) {
             <Card key={section.id} id={section.id}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-3">
-                  <span className="rounded-xl bg-primary/10 p-2 text-primary">
+                  <span className="rounded-2xl bg-primary/10 p-2 text-primary">
                     <Icon className="h-4 w-4" />
                   </span>
                   {section.title}

@@ -52,7 +52,7 @@ const moduleGuideMap: Record<string, GuideLink[]> = {
     {
       href: "/students",
       label: "Students",
-      description: "Use this for admission records, guardian details, and optional student or parent portal provisioning.",
+      description: "Use this for admission intake, guardian details, and optional student or parent portal provisioning.",
     },
   ],
   BATCHES: [
@@ -65,8 +65,8 @@ const moduleGuideMap: Record<string, GuideLink[]> = {
   ACADEMICS: [
     {
       href: "/academic-sessions",
-      label: "Academic Sessions",
-      description: "Define school sessions before planning subjects, exams, and academic reporting.",
+      label: "Academic Years / Terms",
+      description: "Define school periods before planning subjects, exams, and academic reporting.",
     },
     {
       href: "/subjects",
@@ -127,7 +127,7 @@ const moduleGuideMap: Record<string, GuideLink[]> = {
     {
       href: "/reminders",
       label: "Reminders",
-      description: "Manage reminder templates, automation rules, and delivery logs for fee and attendance follow-up.",
+      description: "Manage reminder templates, automation rules, and delivery history for fee and attendance follow-up.",
     },
   ],
   REPORTS: [
@@ -169,13 +169,13 @@ const roleManuals = [
   {
     key: "ACADEMIC_COORDINATOR",
     title: "Academic coordinator manual",
-    description: "Focus on sessions, subjects, teacher planning, assignments, timetables, exams, and result publication quality.",
+    description: "Focus on periods, subjects, teacher planning, assignments, timetables, exams, and result publication quality.",
     icon: GraduationCap,
   },
   {
     key: "TEACHER",
     title: "Teacher manual",
-    description: "Use the academic workspace to follow timetable, exams, results entry, and student academic records.",
+      description: "Use the academic workspace to follow timetable, exams, results entry, and student academic progress.",
     icon: ClipboardCheck,
   },
   {
@@ -290,17 +290,17 @@ export default function GuidePage() {
           <CardDescription>Use the correct creation path so profiles and access stay clean.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
-          <div className="rounded-2xl border p-4">
+          <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
             <p className="font-medium text-foreground">Access roles</p>
             <p className="mt-2">Use the Users module for admin, academic coordinator, and staff onboarding.</p>
           </div>
-          <div className="rounded-2xl border p-4">
+          <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
             <p className="font-medium text-foreground">Teacher profiles</p>
             <p className="mt-2">Use the Teachers module so profile data stays academic-first, with optional teacher login in the same flow.</p>
           </div>
-          <div className="rounded-2xl border p-4">
+          <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
             <p className="font-medium text-foreground">Student and parent access</p>
-            <p className="mt-2">Use the Students module for admission records, then optionally provision student and parent portal access there.</p>
+            <p className="mt-2">Use the Students module for admission intake, then optionally provision student and parent portal access there.</p>
           </div>
         </CardContent>
       </Card>

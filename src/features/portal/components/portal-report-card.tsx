@@ -51,7 +51,7 @@ export function PortalReportCard({ variant }: { variant: "student" | "parent" })
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">
             {variant === "parent" ? "Parent academic summary" : "Student academic summary"}
           </p>
@@ -70,9 +70,9 @@ export function PortalReportCard({ variant }: { variant: "student" | "parent" })
       <Card className="border-border/70">
         <CardHeader className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>{reportCard.studentName}</CardTitle>
-              <CardDescription>
+            <div className="min-w-0">
+              <CardTitle className="break-words">{reportCard.studentName}</CardTitle>
+              <CardDescription className="break-words">
                 {reportCard.batchName} · {reportCard.batchCode}
               </CardDescription>
             </div>
@@ -84,7 +84,7 @@ export function PortalReportCard({ variant }: { variant: "student" | "parent" })
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricCard title="Overall" value={`${reportCard.overallPercentage}%`} helper="Combined academic percentage" icon={GraduationCap} tone="sky" />
           <MetricCard title="Published exams" value={String(reportCard.publishedExamCount)} helper={reportCard.examPercentage !== null ? `${reportCard.examPercentage}% exam average` : "No published exam marks"} icon={BookOpenCheck} tone="violet" />
           <MetricCard title="Assessments" value={String(reportCard.finalizedAssessmentCount)} helper={reportCard.assessmentPercentage !== null ? `${reportCard.assessmentPercentage}% assessment average` : "No scored assessments"} icon={FileQuestion} tone="emerald" />
@@ -103,22 +103,22 @@ export function PortalReportCard({ variant }: { variant: "student" | "parent" })
                 {commendation.label}
               </div>
               <div>
-                <h2 className="text-2xl font-semibold tracking-tight">{commendation.title}</h2>
-                <p className="mt-2 max-w-3xl text-sm text-slate-200">{commendation.description}</p>
+              <h2 className="break-words text-2xl font-semibold tracking-tight">{commendation.title}</h2>
+              <p className="mt-2 max-w-3xl break-words text-sm text-slate-200">{commendation.description}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/10 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Overall score</p>
+                <p className="mt-2 text-xl font-semibold">{reportCard.overallPercentage}%</p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Overall score</p>
-                  <p className="mt-2 text-xl font-semibold">{reportCard.overallPercentage}%</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Top subject</p>
-                  <p className="mt-2 text-xl font-semibold">{strongestSubject?.subjectCode ?? "Pending"}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Focus subject</p>
-                  <p className="mt-2 text-xl font-semibold">{focusSubject?.subjectCode ?? "Pending"}</p>
-                </div>
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/10 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Top subject</p>
+                <p className="mt-2 text-xl font-semibold">{strongestSubject?.subjectCode ?? "Pending"}</p>
+              </div>
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/10 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Focus subject</p>
+                <p className="mt-2 text-xl font-semibold">{focusSubject?.subjectCode ?? "Pending"}</p>
+              </div>
               </div>
             </div>
           </CardContent>
@@ -134,43 +134,43 @@ export function PortalReportCard({ variant }: { variant: "student" | "parent" })
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-[1.5rem] border bg-slate-50 p-4">
+            <div className="rounded-2xl border border-border/70 bg-slate-50 p-4 shadow-sm">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <Target className="h-4 w-4 text-sky-600" />
                 Next message
               </div>
-              <p className="mt-2 text-sm text-slate-600">{commendation.motivation}</p>
+              <p className="mt-2 break-words text-sm text-slate-600">{commendation.motivation}</p>
             </div>
             <div className="space-y-3">
-              <div className="rounded-2xl border p-4 text-sm">
+              <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                 <p className="font-medium text-slate-900">Recognition</p>
-                <p className="mt-1 text-slate-600">
+                <p className="mt-1 break-words text-slate-600">
                   {strongestSubject
                     ? `${strongestSubject.subjectName} is currently leading with ${strongestSubject.combinedPercentage}% combined performance.`
                     : "Recognition will appear here once published marks are available."}
                 </p>
               </div>
-              <div className="rounded-2xl border p-4 text-sm">
+              <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                 <p className="font-medium text-slate-900">Improvement target</p>
-                <p className="mt-1 text-slate-600">
+                <p className="mt-1 break-words text-slate-600">
                   {focusSubject
                     ? `${focusSubject.subjectName} needs the most attention right now. Use assignments, quizzes, and teacher feedback to move this subject upward.`
                     : "The next improvement target will appear once subject-level marks are published."}
                 </p>
               </div>
               {reportCard.focusAreas.length ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm shadow-sm">
                   <div className="flex items-center gap-2 font-medium text-amber-900">
                     <Target className="h-4 w-4" />
                     Focus more here
                   </div>
                   <div className="mt-3 space-y-3">
                     {reportCard.focusAreas.map((item) => (
-                      <div key={item.subjectId} className="rounded-xl border border-amber-200 bg-white/75 p-3">
-                        <p className="font-medium text-slate-900">
+                      <div key={item.subjectId} className="min-w-0 rounded-2xl border border-amber-200 bg-background/80 p-3 shadow-sm">
+                        <p className="break-words font-medium text-slate-900">
                           {item.subjectName} ({item.subjectCode})
                         </p>
-                        <p className="mt-1 text-slate-600">
+                        <p className="mt-1 break-words text-slate-600">
                           {item.combinedPercentage !== null ? `${item.combinedPercentage}% combined.` : "No combined score yet."} {item.message}
                         </p>
                       </div>
@@ -192,11 +192,11 @@ export function PortalReportCard({ variant }: { variant: "student" | "parent" })
           <CardContent className="space-y-3">
             {reportCard.subjectBreakdown.length ? (
               reportCard.subjectBreakdown.map((subject) => (
-                <div key={subject.subjectId} className="rounded-2xl border p-4 text-sm">
+                <div key={subject.subjectId} className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{subject.subjectName}</p>
-                      <p className="text-muted-foreground">{subject.subjectCode}</p>
+                    <div className="min-w-0">
+                      <p className="break-words font-medium">{subject.subjectName}</p>
+                      <p className="break-words text-muted-foreground">{subject.subjectCode}</p>
                     </div>
                     <Badge variant="outline">
                       {subject.combinedPercentage !== null ? `${subject.combinedPercentage}% combined` : "No marks yet"}
@@ -245,7 +245,7 @@ export function PortalReportCard({ variant }: { variant: "student" | "parent" })
 
 function MiniScore({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="rounded-2xl border px-4 py-3">
+    <div className="min-w-0 rounded-2xl border px-4 py-3">
       <p className="text-muted-foreground">{label}</p>
       <p className="mt-1 font-medium">{value !== null ? `${value}%` : "Pending"}</p>
     </div>

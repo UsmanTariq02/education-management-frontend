@@ -6,6 +6,9 @@ export type ReminderChannel = "SMS" | "WHATSAPP" | "EMAIL" | "MANUAL";
 export type ReminderStatus = "PENDING" | "SENT" | "FAILED";
 export type ReminderAutomationTrigger = "FEE_DUE" | "FEE_OVERDUE" | "PAYMENT_RECEIVED";
 export type ReminderRecipientTarget = "STUDENT" | "GUARDIAN" | "BOTH";
+export type MailMessageStatus = "DRAFT" | "SENT";
+export type MailRecipientType = "TO" | "CC" | "BCC";
+export type MailAudienceGroup = "STAFF" | "TEACHER" | "STUDENT" | "PARENT";
 export type ReminderScheduleStatus = "PENDING" | "PROCESSING" | "SENT" | "FAILED" | "CANCELLED" | "SKIPPED";
 export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CARD" | "ONLINE" | "CHEQUE" | "OTHER";
 export type ContactInquiryStatus = "NEW" | "REVIEWED" | "CONTACTED";
@@ -20,6 +23,9 @@ export type AssessmentStatus = "DRAFT" | "PUBLISHED" | "CLOSED";
 export type AssessmentResultStatus = "PROVISIONAL" | "FINALIZED";
 export type StudentDocumentType = "ID_CARD" | "ADMISSION_FORM" | "BIRTH_CERTIFICATE" | "GUARDIAN_ID" | "ACADEMIC_RECORD" | "MEDICAL_RECORD" | "OTHER";
 export type OrganizationAssetType = "LOGO" | "LETTERHEAD" | "STAMP" | "BROCHURE" | "OTHER";
+export type AiPromptPreset = "STANDARD" | "CONCISE" | "FRIENDLY" | "FORMAL" | "PARENT" | "STAFF" | "FINANCE";
+export type AiReviewKind = "NOTICE" | "NOTICE_CAMPAIGN" | "MAIL" | "SUPPORT" | "ADMISSION" | "RISK" | "FEES" | "ATTENDANCE" | "REMINDER";
+export type AiReviewStatus = "DRAFT" | "APPROVED" | "ARCHIVED";
 export type OrganizationModule =
   | "USERS"
   | "STUDENTS"
@@ -29,6 +35,7 @@ export type OrganizationModule =
   | "FEES"
   | "ATTENDANCE"
   | "REMINDERS"
+  | "MAIL"
   | "REPORTS"
   | "ACTIVITY_LOGS"
   | "SETTINGS"
@@ -86,8 +93,12 @@ export interface Organization {
   subscriptionStartsAt: string | null;
   subscriptionEndsAt: string | null;
   subscriptionNotes: string | null;
+  aiDraftApprovalRequired: boolean;
   userLimit: number;
   studentLimit: number;
+  hasOpenAiApiKey: boolean;
+  hasTrialAiAccess: boolean;
+  openAiApiKeyUpdatedAt: string | null;
   enabledModules: OrganizationModule[];
   totalUsers: number;
   totalAdmins: number;
@@ -589,7 +600,7 @@ export interface PortalActivityFeedItem {
   actorName: string | null;
 }
 
-export type PortalAcknowledgementKind = "FEE_DUE" | "ASSIGNMENT_FEEDBACK" | "ASSESSMENT_RESULT" | "EXAM_RESULT";
+export type PortalAcknowledgementKind = "FEE_DUE" | "ASSIGNMENT_FEEDBACK" | "ASSESSMENT_RESULT" | "EXAM_RESULT" | "ANNOUNCEMENT";
 
 export interface PortalAcknowledgementItem {
   itemKey: string;
@@ -623,6 +634,7 @@ export interface PortalAnnouncement {
   isPinned: boolean;
   publishedAt: string | null;
   expiresAt: string | null;
+  acknowledgedAt: string | null;
 }
 
 export interface PortalFeePaymentProof {
@@ -1097,6 +1109,33 @@ export interface FeeRecord {
   updatedAt: string;
 }
 
+export interface WeeklyPrincipalSummary {
+  organizationId: string | null;
+  organizationName: string;
+  generatedAt: string;
+  headline: string;
+  overview: string;
+  highlights: string[];
+  risks: string[];
+  nextActions: string[];
+}
+
+export interface FeeEscalationOrganizationSummary {
+  organizationId: string;
+  organizationName: string;
+  candidateRecords: number;
+  remindersCreated: number;
+  remindersSkipped: number;
+}
+
+export interface FeeEscalationAutomationSummary {
+  processedOrganizations: number;
+  candidateRecords: number;
+  remindersCreated: number;
+  remindersSkipped: number;
+  organizations: FeeEscalationOrganizationSummary[];
+}
+
 export interface AttendanceRecord {
   id: string;
   studentId: string;
@@ -1106,6 +1145,22 @@ export interface AttendanceRecord {
   remarks: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AttendanceFollowUpOrganizationSummary {
+  organizationId: string;
+  organizationName: string;
+  candidateStudents: number;
+  remindersCreated: number;
+  remindersSkipped: number;
+}
+
+export interface AttendanceFollowUpAutomationSummary {
+  processedOrganizations: number;
+  candidateStudents: number;
+  remindersCreated: number;
+  remindersSkipped: number;
+  organizations: AttendanceFollowUpOrganizationSummary[];
 }
 
 export interface ReminderLog {
@@ -1162,6 +1217,311 @@ export interface ReminderProviderSetting {
   replyToEmail: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MailConversation {
+  id: string;
+  organizationId: string;
+  subject: string;
+  createdByEmail: string;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MailRecipient {
+  id: string;
+  mailMessageId: string;
+  email: string;
+  name: string | null;
+  recipientType: MailRecipientType;
+  readAt: string | null;
+  starredAt: string | null;
+  archivedAt: string | null;
+  trashedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MailMessage {
+  id: string;
+  organizationId: string;
+  conversationId: string;
+  senderEmail: string;
+  senderName: string;
+  subject: string;
+  body: string;
+  status: MailMessageStatus;
+  sentAt: string | null;
+  senderReadAt: string | null;
+  senderStarredAt: string | null;
+  senderArchivedAt: string | null;
+  senderTrashedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  recipients: MailRecipient[];
+  conversation?: MailConversation;
+}
+
+export interface MailMailboxItem extends MailMessage {
+  conversationSubject: string;
+  bodyPreview: string;
+  isSender: boolean;
+  folder: "inbox" | "sent" | "drafts" | "starred" | "trash" | "all";
+  state: {
+    readAt: string | null;
+    starredAt: string | null;
+    archivedAt: string | null;
+    trashedAt: string | null;
+  };
+  unread: boolean;
+}
+
+export interface MailFolderCounts {
+  inbox: { total: number; unread: number };
+  sent: { total: number; unread: number };
+  drafts: { total: number; unread: number };
+  starred: { total: number; unread: number };
+  trash: { total: number; unread: number };
+}
+
+export interface MailMailboxResponse {
+  items: MailMailboxItem[];
+  total: number;
+  page: number;
+  limit: number;
+  counts: MailFolderCounts;
+}
+
+export interface MailConversationDetail {
+  id: string;
+  organizationId: string;
+  subject: string;
+  createdByEmail: string;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  messages: MailMailboxItem[];
+}
+
+export interface MailContact {
+  email: string;
+  name: string;
+  role: string;
+  kind: "USER" | "TEACHER" | "STUDENT" | "PORTAL";
+  audienceGroup?: MailAudienceGroup;
+}
+
+export interface AiNoticeDraft {
+  title: string;
+  subject: string;
+  body: string;
+  audienceSummary: string;
+  tone: string;
+  callToAction: string;
+  keyPoints: string[];
+}
+
+export type NoticeCampaignAudience = "STUDENT" | "PARENT" | "BOTH";
+
+export interface NoticeCampaignSummary {
+  id: string;
+  title: string;
+  category: string;
+  audience: NoticeCampaignAudience;
+  isPinned: boolean;
+  isPublished: boolean;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  targetScope: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoticeCampaignAnalytics {
+  organizationId: string;
+  organizationName: string;
+  totalCampaigns: number;
+  publishedCampaigns: number;
+  scheduledCampaigns: number;
+  pinnedCampaigns: number;
+  expiringSoonCampaigns: number;
+  audienceBreakdown: Array<{ audience: NoticeCampaignAudience; count: number }>;
+  categoryBreakdown: Array<{ category: string; count: number }>;
+  latestPublishedAt: string | null;
+}
+
+export interface AnnouncementDeliveryAnalytics {
+  organizationId: string;
+  organizationName: string;
+  publishedAnnouncements: number;
+  activeAnnouncements: number;
+  pinnedAnnouncements: number;
+  deliveryTargets: number;
+  readReceipts: number;
+  uniqueReadAnnouncements: number;
+  readRate: number;
+  audienceBreakdown: Array<{ audience: "STUDENT" | "PARENT" | "BOTH"; count: number }>;
+  latestPublishedAt: string | null;
+}
+
+export interface AiReviewItem {
+  id: string;
+  kind: AiReviewKind;
+  title: string;
+  summary: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  status: AiReviewStatus;
+  archivedAt: string | null;
+  approvedAt: string | null;
+}
+
+export interface AiReviewQueueSummary {
+  organizationId: string;
+  organizationName: string;
+  totalItems: number;
+  draftItems: number;
+  approvedItems: number;
+  archivedItems: number;
+  kindBreakdown: Array<{ kind: string; count: number }>;
+  latestCreatedAt: string | null;
+  latestUpdatedAt: string | null;
+  latestApprovedAt: string | null;
+  latestArchivedAt: string | null;
+}
+
+export interface AiOrganizationQueueSummary {
+  organizationId: string;
+  organizationName: string;
+  totalItems: number;
+  draftItems: number;
+  approvedItems: number;
+  archivedItems: number;
+  kindBreakdown: Array<{ kind: string; count: number }>;
+  userBreakdown: Array<{
+    userId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    count: number;
+    latestUpdatedAt: string | null;
+  }>;
+  latestCreatedAt: string | null;
+  latestUpdatedAt: string | null;
+}
+
+export interface AiOrganizationQueueTrendPoint {
+  date: string;
+  createdCount: number;
+  updatedCount: number;
+  draftCount: number;
+  approvedCount: number;
+  archivedCount: number;
+}
+
+export interface AiMailDraft {
+  subject: string;
+  body: string;
+  tone: string;
+  followUp: string;
+  keyPoints: string[];
+}
+
+export interface AiSupportReply {
+  reply: string;
+  escalationNeeded: boolean;
+  reason: string;
+  suggestedActions: string[];
+}
+
+export interface AiStudentRiskRecommendation {
+  overview: string;
+  riskLevel: string;
+  keySignals: string[];
+  recommendedActions: string[];
+  parentMessageDraft: string;
+  staffNote: string;
+  escalationNeeded: boolean;
+  confidence: number;
+}
+
+export interface AiFeeCollectionPlan {
+  overview: string;
+  riskLevel: string;
+  keySignals: string[];
+  collectionStrategy: string;
+  recommendedActions: string[];
+  parentMessageDraft: string;
+  internalNote: string;
+  escalationNeeded: boolean;
+  confidence: number;
+}
+
+export interface AiAttendanceIntervention {
+  overview: string;
+  riskLevel: string;
+  keySignals: string[];
+  recommendedActions: string[];
+  parentMessageDraft: string;
+  staffNote: string;
+  escalationNeeded: boolean;
+  confidence: number;
+}
+
+export interface AiReminderDraft {
+  subject: string;
+  body: string;
+  audienceSummary: string;
+  tone: string;
+  callToAction: string;
+  keyPoints: string[];
+  deliveryTip: string;
+  confidence: number;
+}
+
+export interface AiUsageBreakdownItem {
+  provider?: string;
+  schemaName?: string;
+  count: number;
+}
+
+export interface AiUsageSummary {
+  organizationId: string;
+  organizationName: string;
+  trialAccess: boolean;
+  todayCount: number;
+  weekCount: number;
+  monthCount: number;
+  trialTodayCount: number;
+  trialDailyLimit: number;
+  trialRemaining: number;
+  lastGeneratedAt: string | null;
+  providerBreakdown: Array<{ provider: "openai" | "groq"; count: number }>;
+  schemaBreakdown: Array<{ schemaName: string; count: number }>;
+}
+
+export interface AiAdmissionExtractionStudent {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  guardianName: string;
+  guardianEmail: string;
+  guardianPhone: string;
+  address: string;
+  dateOfBirth: string;
+  admissionDate: string;
+  status: StudentStatus;
+  batchCodes: string[];
+}
+
+export interface AiAdmissionExtraction {
+  student: AiAdmissionExtractionStudent;
+  missingFields: string[];
+  notes: string[];
+  confidence: number;
 }
 
 export interface ContactInquiry {

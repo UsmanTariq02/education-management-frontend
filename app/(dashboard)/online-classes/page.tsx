@@ -29,6 +29,7 @@ import { normalizeApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/formatters";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePermission } from "@/hooks/use-permission";
+import { ONLINE_CLASSES_ENABLED } from "@/lib/constants/features";
 import type { OnlineClassSession, TimetableEntry } from "@/types/domain";
 
 const sessionSchema = z.object({
@@ -38,6 +39,18 @@ const sessionSchema = z.object({
 });
 
 type SessionSchema = z.infer<typeof sessionSchema>;
+
+const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      query.set(key, value);
+    }
+  }
+
+  return query.toString() ? `/activity-logs?${query.toString()}` : "/activity-logs";
+};
 
 export default function OnlineClassesPage() {
   const queryClient = useQueryClient();
@@ -50,20 +63,23 @@ export default function OnlineClassesPage() {
   const canUpdate = usePermission("online-classes.update");
   const canSync = usePermission("online-classes.sync");
   const canProcessAttendance = usePermission("online-classes.attendance");
+  const canRead = usePermission("online-classes.read");
 
   const sessionsQuery = useQuery({
     queryKey: ["online-classes", debouncedSearch, pageIndex],
     queryFn: () => onlineClassesApi.list({ page: pageIndex + 1, limit: 10, search: debouncedSearch }),
+    enabled: canRead,
   });
   const shouldLoadTimetableOptions = open;
   const automationSummaryQuery = useQuery({
     queryKey: ["online-classes", "automation-summary"],
     queryFn: onlineClassesApi.getAutomationSummary,
+    enabled: canRead,
   });
   const timetablesQuery = useQuery({
     queryKey: ["timetables", "online-class-options"],
     queryFn: () => timetablesApi.list({ page: 1, limit: 100 }),
-    enabled: shouldLoadTimetableOptions,
+    enabled: shouldLoadTimetableOptions && canRead,
   });
 
   const form = useForm<SessionSchema>({
@@ -232,6 +248,14 @@ export default function OnlineClassesPage() {
   );
 
   if (sessionsQuery.isLoading) return <LoadingState rows={6} />;
+  if (!ONLINE_CLASSES_ENABLED || !canRead) {
+    return (
+      <ErrorState
+        description="Online classes are temporarily disabled while we finish other modules."
+        onRetry={() => sessionsQuery.refetch()}
+      />
+    );
+  }
   if (sessionsQuery.isError || !sessionsQuery.data) {
     return <ErrorState description="Online classes could not be loaded." onRetry={() => sessionsQuery.refetch()} />;
   }
@@ -241,7 +265,7 @@ export default function OnlineClassesPage() {
       <PageHeader
         eyebrow="Academics"
         title="Online classes"
-        description="Schedule online class sessions from timetable entries, review participant sessions, and process attendance from actual joins."
+        description="Schedule online class occurrences from timetable entries, review participant join records, and process attendance from actual joins."
       />
       <OrganizationScopeBanner moduleLabel="Academic operations" />
       <div className="rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -252,10 +276,21 @@ export default function OnlineClassesPage() {
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Visible sessions" value={String(stats.total)} helper="Scheduled online sessions in current scope" icon={Video} tone="sky" />
-        <MetricCard title="Live sessions" value={String(stats.live)} helper="Sessions currently marked live" icon={PlayCircle} tone="amber" />
+        <MetricCard title="Visible classes" value={String(stats.total)} helper="Scheduled online class occurrences in current scope" icon={Video} tone="sky" />
+        <MetricCard title="Live classes" value={String(stats.live)} helper="Class occurrences currently marked live" icon={PlayCircle} tone="amber" />
         <MetricCard title="Attendance processed" value={String(stats.processed)} helper="Sessions already converted into attendance" icon={CalendarCheck2} tone="emerald" />
-        <MetricCard title="Participant rows" value={String(stats.participants)} helper="Stored participant join sessions" icon={Users} tone="violet" />
+        <MetricCard title="Participant rows" value={String(stats.participants)} helper="Stored participant join records" icon={Users} tone="violet" />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ module: "online-classes" })}>Audit online class events</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ module: "online-classes", action: "attendance-processed" })}>Audit attendance processing</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ module: "online-classes", action: "automation-cycle" })}>Audit automation runs</Link>
+        </Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -266,9 +301,9 @@ export default function OnlineClassesPage() {
           tone={automationSummary?.lastRun?.status === "FAILED" ? "rose" : automationSummary?.lastRun?.status === "SUCCESS" ? "emerald" : "amber"}
         />
         <MetricCard
-          title="Failed sync sessions"
+          title="Failed sync attempts"
           value={String(automationSummary?.failedSessionsCount ?? 0)}
-          helper="Sessions with a stored participant sync failure"
+          helper="Occurrences with a stored participant sync failure"
           icon={Users}
           tone={(automationSummary?.failedSessionsCount ?? 0) > 0 ? "rose" : "emerald"}
         />
@@ -308,7 +343,7 @@ export default function OnlineClassesPage() {
                 </DialogTrigger>
                 <DialogContent className="max-w-2xl">
                   <DialogHeader>
-                    <DialogTitle>Schedule online class session</DialogTitle>
+                    <DialogTitle>Schedule online class occurrence</DialogTitle>
                     <DialogDescription>Create one online class occurrence from an online-enabled timetable entry.</DialogDescription>
                   </DialogHeader>
                   <form className="grid gap-4" onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}>
@@ -323,17 +358,17 @@ export default function OnlineClassesPage() {
                       </NativeSelect>
                     </FormField>
                     <FormField label="Scheduled start" required error={form.formState.errors.scheduledStartAt}>
-                      <input className="h-10 rounded-xl border bg-background px-3 text-sm" type="datetime-local" {...form.register("scheduledStartAt")} />
+                      <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" type="datetime-local" {...form.register("scheduledStartAt")} />
                     </FormField>
                     <FormField label="Scheduled end" required error={form.formState.errors.scheduledEndAt}>
-                      <input className="h-10 rounded-xl border bg-background px-3 text-sm" type="datetime-local" {...form.register("scheduledEndAt")} />
+                      <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" type="datetime-local" {...form.register("scheduledEndAt")} />
                     </FormField>
                     <div className="flex justify-end gap-2">
                       <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                         Cancel
                       </Button>
                       <Button type="submit" disabled={createMutation.isPending}>
-                        Create session
+                        Create occurrence
                       </Button>
                     </div>
                   </form>
@@ -360,7 +395,7 @@ export default function OnlineClassesPage() {
             <p className="text-sm text-muted-foreground">Loading automation history...</p>
           ) : automationSummary?.recentRuns.length ? (
             automationSummary.recentRuns.map((run) => (
-              <div key={run.id} className="rounded-2xl border p-4 text-sm">
+              <div key={run.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Badge variant={run.status === "FAILED" ? "danger" : run.status === "SUCCESS" ? "success" : "outline"}>
@@ -383,7 +418,7 @@ export default function OnlineClassesPage() {
       <Dialog open={Boolean(selectedSession)} onOpenChange={(nextOpen) => !nextOpen && setSelectedSession(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Online class session</DialogTitle>
+            <DialogTitle>Online class occurrence</DialogTitle>
             <DialogDescription>Review provider, meeting context, and participant activity before processing attendance.</DialogDescription>
           </DialogHeader>
           {selectedSession ? (
@@ -403,7 +438,7 @@ export default function OnlineClassesPage() {
                   : "Not synced yet"}
               </p>
               {selectedSession.lastParticipantSyncError ? (
-                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700">
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-rose-700 shadow-sm">
                   {selectedSession.lastParticipantSyncError}
                 </div>
               ) : null}
@@ -453,7 +488,7 @@ export default function OnlineClassesPage() {
                 <p className="font-medium">Participants</p>
                 {selectedSession.participantSessions.length ? (
                   selectedSession.participantSessions.map((participant) => (
-                    <div key={participant.id} className="rounded-2xl border p-3">
+                    <div key={participant.id} className="rounded-2xl border border-border/70 bg-background/70 p-3 shadow-sm">
                       <p>{participant.studentName ?? participant.participantName ?? "Unknown participant"}</p>
                       <p className="text-muted-foreground">{participant.participantEmail ?? "No email"} · {participant.totalMinutes} minutes</p>
                       <p className="text-muted-foreground">
@@ -463,7 +498,7 @@ export default function OnlineClassesPage() {
                     </div>
                   ))
                 ) : (
-                  <EmptyState title="No participants synced" description="Sync the provider session to pull join activity and auto-attendance evidence." />
+                  <EmptyState title="No participants synced" description="Sync the provider occurrence to pull join activity and auto-attendance evidence." />
                 )}
               </div>
             </div>

@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ClipboardCheck, Gauge, GraduationCap, LayoutGrid, Rows3, Table2, Trophy } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { examResultsApi } from "@/features/exam-results/api/exam-results-api";
 import { examResultSchema, type ExamResultSchema } from "@/features/exam-results/schemas/exam-result-schema";
@@ -32,6 +33,7 @@ import { getChartColor } from "@/lib/constants/chart-colors";
 import { normalizeApiError } from "@/lib/api/errors";
 import { useAuth } from "@/providers/auth-provider";
 import type { ExamResult } from "@/types/domain";
+import { exportRowsToCsv } from "@/lib/utils/export";
 
 export default function ExamResultsPage() {
   const { user } = useAuth();
@@ -40,6 +42,7 @@ export default function ExamResultsPage() {
   const debouncedSearch = useDebouncedValue(search);
   const [viewMode, setViewMode] = useState<"table" | "students" | "subjects" | "insights">("students");
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [open, setOpen] = useState(false);
   const [editingResult, setEditingResult] = useState<ExamResult | null>(null);
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
@@ -115,6 +118,16 @@ export default function ExamResultsPage() {
       setOpen(false);
       setEditingResult(null);
       form.reset();
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => examResultsApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected exam results deleted");
+      queryClient.invalidateQueries({ queryKey: ["exam-results"] });
+      setRowSelection({});
     },
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
@@ -197,6 +210,9 @@ export default function ExamResultsPage() {
       }))
       .sort((left, right) => right.average - left.average);
   }, [results]);
+  const selectedResultIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
   const examInsights = useMemo(() => {
     const byExam = new Map<
       string,
@@ -236,6 +252,31 @@ export default function ExamResultsPage() {
       }))
       .sort((left, right) => right.average - left.average);
   }, [results]);
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
+  const selectedResultExportRows = useMemo(
+    () =>
+      results
+        .filter((result) => selectedResultIds.includes(result.id))
+        .map((result) => ({
+          Student: result.studentName,
+          Exam: result.examName,
+          ExamCode: result.examCode,
+          Batch: result.batchName,
+          Percentage: `${result.percentage}%`,
+          Grade: result.grade ?? "",
+          Status: result.status,
+        })),
+    [results, selectedResultIds],
+  );
 
   const columns = useMemo<Array<ColumnDef<ExamResult>>>(
     () => [
@@ -320,8 +361,46 @@ export default function ExamResultsPage() {
         <MetricCard title="Average %" value={`${stats.average}%`} helper="Average score across visible records" icon={Gauge} tone="violet" />
         <MetricCard title="Distinctions" value={String(stats.distinction)} helper="Students scoring 80% or above" icon={Trophy} tone="amber" />
       </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ module: "exam-results" })}>Audit result events</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Audit bulk deletes</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "create" })}>Audit result creation</Link>
+        </Button>
+      </div>
+
+      {selectedResultIds.length > 0 && canManage ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedResultIds.length} exam result{selectedResultIds.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "exam-results-selected", rows: selectedResultExportRows })}
+              disabled={selectedResultExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => bulkDeleteMutation.mutate(selectedResultIds)}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-6 xl:grid-cols-3">
-        <div className="rounded-2xl border bg-card p-4 xl:col-span-2">
+        <div className="rounded-2xl border border-border/70 bg-card/85 p-4 shadow-sm backdrop-blur xl:col-span-2">
           <p className="mb-4 text-sm font-medium">Grade Distribution</p>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -337,7 +416,7 @@ export default function ExamResultsPage() {
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="rounded-2xl border bg-card p-4">
+        <div className="rounded-2xl border border-border/70 bg-card/85 p-4 shadow-sm backdrop-blur">
           <p className="mb-4 text-sm font-medium">Publish Rate</p>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -415,7 +494,7 @@ export default function ExamResultsPage() {
                       <Input {...form.register("remarks")} />
                     </FormField>
                   </div>
-                  <div className="space-y-3 rounded-2xl border p-4">
+                  <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium">Exam papers and marks entry</p>
                       {selectedExam ? (
@@ -425,7 +504,7 @@ export default function ExamResultsPage() {
                       ) : null}
                     </div>
                     {!itemFields.fields.length ? (
-                      <div className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                      <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-sm text-muted-foreground shadow-sm">
                         {selectedExamId && examDetailQuery.isLoading
                           ? "Loading exam papers..."
                           : "Select an exam to load its subject papers automatically."}
@@ -442,7 +521,7 @@ export default function ExamResultsPage() {
                     {itemFields.fields.map((field, index) => {
                       const subject = selectedExam?.subjects.find((item) => item.id === field.examSubjectId);
                       return (
-                        <div key={field.id} className="grid gap-3 rounded-2xl border p-4 md:grid-cols-[1.8fr_0.9fr_1fr_1.2fr]">
+                        <div key={field.id} className="grid gap-3 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm md:grid-cols-[1.8fr_0.9fr_1fr_1.2fr]">
                           <div className="text-sm">
                             <p className="mb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground md:hidden">Subject</p>
                             <p className="font-medium">{subject?.subjectName ?? "Exam subject"}</p>
@@ -650,6 +729,9 @@ export default function ExamResultsPage() {
           pageCount={Math.ceil(resultsQuery.data.total / resultsQuery.data.limit)}
           pagination={{ pageIndex, pageSize: resultsQuery.data.limit }}
           onPaginationChange={(state) => setPageIndex(state.pageIndex)}
+          enableRowSelection
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
         />
       ) : null}
       <Dialog open={Boolean(selectedResult)} onOpenChange={(nextOpen) => !nextOpen && setSelectedResult(null)}>
@@ -666,10 +748,10 @@ export default function ExamResultsPage() {
                 <DetailItem label="Batch" value={selectedResult.batchName} />
                 <DetailItem label="Outcome" value={`${selectedResult.percentage}%${selectedResult.grade ? ` · ${selectedResult.grade}` : ""} · ${selectedResult.status}`} />
               </div>
-              <div className="space-y-3 rounded-2xl border p-4">
+              <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                 <p className="text-sm font-medium">Subject breakdown</p>
                 {selectedResult.items.map((item) => (
-                  <div key={item.id} className="grid gap-3 rounded-xl border p-3 md:grid-cols-[1.6fr_0.8fr_0.8fr_1fr]">
+                  <div key={item.id} className="grid gap-3 rounded-2xl border border-border/70 bg-background/70 p-3 shadow-sm md:grid-cols-[1.6fr_0.8fr_0.8fr_1fr]">
                     <div>
                       <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground md:hidden">Subject</p>
                       <p className="font-medium">{item.subjectName}</p>

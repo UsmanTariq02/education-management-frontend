@@ -1,16 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { BadgeCheck, Clock3, UserMinus, Users } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useForm } from "react-hook-form";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
 import { toast } from "sonner";
+import { aiApi } from "@/features/ai/api/ai-api";
 import { attendanceApi } from "@/features/attendance/api/attendance-api";
 import { attendanceSchema, type AttendanceSchema } from "@/features/attendance/schemas/attendance-schema";
 import { batchesApi } from "@/features/batches/api/batches-api";
+import { remindersApi } from "@/features/reminders/api/reminders-api";
 import { studentsApi } from "@/features/students/api/students-api";
 import { normalizeApiError } from "@/lib/api/errors";
 import type { AttendanceRecord } from "@/types/domain";
@@ -23,17 +26,61 @@ import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/form-field";
 import { formatDate } from "@/lib/formatters";
-import { getAttendanceBadgeVariant, getAttendanceColor } from "@/lib/constants/status-colors";
+import { getAttendanceBadgeVariant } from "@/lib/constants/status-colors";
 import { getChartColor } from "@/lib/constants/chart-colors";
 import { OrganizationScopeBanner } from "@/components/shared/organization-scope-banner";
 import { useAuth } from "@/providers/auth-provider";
+import { hasAiAccess } from "@/lib/ai/access";
 import { MetricCard } from "@/components/cards/metric-card";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { exportRowsToCsv } from "@/lib/utils/export";
+import type { AiAttendanceIntervention, AttendanceFollowUpAutomationSummary } from "@/types/domain";
+import { AttendanceBulkImportDialog } from "@/features/attendance/components/attendance-bulk-import-dialog";
+
+function buildAttendanceInterventionContext({
+  selectedRecord,
+  filteredAttendance,
+  studentMap,
+  batchMap,
+  attendanceStats,
+}: {
+  selectedRecord: AttendanceRecord | null;
+  filteredAttendance: AttendanceRecord[];
+  studentMap: Map<string, { fullName: string; guardianName: string; phone: string }>;
+  batchMap: Map<string, { name: string }>;
+  attendanceStats: {
+    totalRecords: number;
+    presentCount: number;
+    absentCount: number;
+    lateOrLeaveCount: number;
+  };
+}) {
+  const focusRecord = selectedRecord ?? filteredAttendance.find((record) => record.status !== "PRESENT") ?? filteredAttendance[0] ?? null;
+  const focusStudent = focusRecord ? studentMap.get(focusRecord.studentId) : null;
+
+  return [
+    `Attendance summary: ${attendanceStats.totalRecords} records, present ${attendanceStats.presentCount}, absent ${attendanceStats.absentCount}, late/leave ${attendanceStats.lateOrLeaveCount}`,
+    `Focus record: ${focusRecord ? `${focusStudent?.fullName ?? "Unknown student"} ${focusRecord.attendanceDate} status ${focusRecord.status} remarks ${focusRecord.remarks ?? "None"}` : "None"}`,
+    focusRecord ? `Batch: ${batchMap.get(focusRecord.batchId)?.name ?? "Unknown batch"}` : null,
+    focusRecord ? `Guardian contact: ${focusStudent?.guardianName ?? "Unknown guardian"} · ${focusStudent?.phone ?? "No phone"}` : null,
+    filteredAttendance
+      .slice(0, 8)
+      .map((record) => {
+        const student = studentMap.get(record.studentId);
+        const batch = batchMap.get(record.batchId);
+        return `${student?.fullName ?? "Unknown student"} | ${batch?.name ?? "Unknown batch"} | ${record.attendanceDate} | ${record.status} | ${record.remarks ?? "No remarks"}`;
+      })
+      .join("\n"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
 
 export default function AttendancePage() {
   const { user } = useAuth();
@@ -41,13 +88,16 @@ export default function AttendancePage() {
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const pageSize = 12;
   const [open, setOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
+  const [attendanceIntervention, setAttendanceIntervention] = useState<AiAttendanceIntervention | null>(null);
   const canCreate = usePermission("attendance.create");
   const canManage = usePermission("attendance.update");
   const canMutateWithinScope = Boolean(user?.organizationId);
+  const aiReady = hasAiAccess(user);
   const queryClient = useQueryClient();
 
   const attendanceQuery = useQuery({
@@ -85,6 +135,74 @@ export default function AttendancePage() {
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => attendanceApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected attendance records deleted");
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: async (status: "PRESENT" | "ABSENT" | "LATE" | "LEAVE") =>
+      attendanceApi.bulkStatus({
+        ids: selectedAttendanceIds,
+        status,
+      }),
+    onSuccess: (_, status) => {
+      toast.success(`Selected attendance records marked ${status.toLowerCase()}`);
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkFollowUpMutation = useMutation({
+    mutationFn: async () => {
+      const targetRecords = filteredAttendance.filter(
+        (record) => selectedAttendanceIds.includes(record.id) && (record.status === "ABSENT" || record.status === "LATE"),
+      );
+
+      if (targetRecords.length === 0) {
+        throw new Error("Select at least one absent or late record");
+      }
+
+      const messageTemplate = attendanceIntervention?.parentMessageDraft?.trim();
+
+      const results = await Promise.all(
+        targetRecords.map((record) => {
+          const student = studentMap.get(record.studentId);
+          const message =
+            messageTemplate ??
+            `Attendance follow-up for ${student?.fullName ?? "the student"} on ${new Date(record.attendanceDate).toLocaleDateString()}.
+
+Status: ${record.status}
+Remarks: ${record.remarks ?? "No remarks"}
+
+Please review attendance concerns with the school office.`;
+
+          return remindersApi.create({
+            studentId: record.studentId,
+            channel: "MANUAL",
+            message,
+            status: "SENT",
+          });
+        }),
+      );
+
+      return results.length;
+    },
+    onSuccess: (createdCount) => {
+      toast.success(`Created ${createdCount} attendance follow-up reminder${createdCount === 1 ? "" : "s"}`);
+      queryClient.invalidateQueries({ queryKey: ["reminders"] });
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
   const filteredAttendance = useMemo(() => {
     const items = attendanceQuery.data?.items ?? [];
 
@@ -92,6 +210,9 @@ export default function AttendancePage() {
   }, [attendanceQuery.data, statusFilter]);
 
   const hasLocalFilters = statusFilter !== "ALL";
+  const selectedAttendanceIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
 
   const summaryData = useMemo(() => {
     const counts = new Map<string, number>();
@@ -174,6 +295,19 @@ export default function AttendancePage() {
       })),
     [batchMap, filteredAttendance, studentMap],
   );
+  const selectedAttendanceExportRows = useMemo(
+    () =>
+      filteredAttendance
+        .filter((record) => selectedAttendanceIds.includes(record.id))
+        .map((record) => ({
+          Student: studentMap.get(record.studentId)?.fullName ?? "Unknown student",
+          Batch: batchMap.get(record.batchId)?.name ?? "Unknown batch",
+          Date: formatDate(record.attendanceDate),
+          Status: record.status,
+          Remarks: record.remarks ?? "",
+        })),
+    [batchMap, filteredAttendance, selectedAttendanceIds, studentMap],
+  );
 
   const attendanceStats = useMemo(() => {
     return {
@@ -183,6 +317,52 @@ export default function AttendancePage() {
       lateOrLeaveCount: filteredAttendance.filter((item) => item.status === "LATE" || item.status === "LEAVE").length,
     };
   }, [filteredAttendance]);
+
+  const attendanceInterventionContext = useMemo(
+    () =>
+      buildAttendanceInterventionContext({
+        selectedRecord,
+        filteredAttendance,
+        studentMap,
+        batchMap,
+        attendanceStats,
+      }),
+    [attendanceStats, batchMap, filteredAttendance, selectedRecord, studentMap],
+  );
+
+  const attendanceAiMutation = useMutation({
+    mutationFn: async () =>
+      aiApi.generateAttendanceIntervention({
+        studentName: selectedRecord ? studentMap.get(selectedRecord.studentId)?.fullName ?? "Selected student" : undefined,
+        context: attendanceInterventionContext,
+      }),
+    onSuccess: (data) => {
+      setAttendanceIntervention(data);
+      toast.success("Attendance intervention generated");
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+  const attendanceAutomationMutation = useMutation({
+    mutationFn: async () => attendanceApi.processFollowUps(),
+    onSuccess: (summary: AttendanceFollowUpAutomationSummary) => {
+      toast.success(
+        `Attendance follow-ups processed for ${summary.processedOrganizations} organization${summary.processedOrganizations === 1 ? "" : "s"} and created ${summary.remindersCreated} reminder${summary.remindersCreated === 1 ? "" : "s"}.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["reminders"] });
+      queryClient.invalidateQueries({ queryKey: ["activity-logs"] });
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
 
   if (attendanceQuery.isLoading || studentsQuery.isLoading || batchesQuery.isLoading) return <LoadingState rows={6} />;
   if (attendanceQuery.isError || studentsQuery.isError || batchesQuery.isError || !attendanceQuery.data || !studentsQuery.data || !batchesQuery.data) {
@@ -198,6 +378,95 @@ export default function AttendancePage() {
         <MetricCard title="Present" value={String(attendanceStats.presentCount)} helper="Students marked present" icon={BadgeCheck} tone="emerald" />
         <MetricCard title="Absent" value={String(attendanceStats.absentCount)} helper="Students marked absent" icon={UserMinus} tone="rose" />
         <MetricCard title="Late or leave" value={String(attendanceStats.lateOrLeaveCount)} helper="Operational exceptions requiring review" icon={Clock3} tone="amber" />
+      </div>
+      <Card className="border-border/70 bg-card/85 shadow-sm backdrop-blur">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-xl">AI attendance intervention</CardTitle>
+              <CardDescription>Generate a follow-up plan, staff note, and parent message from the current attendance context.</CardDescription>
+            </div>
+            <Button onClick={() => attendanceAiMutation.mutate()} disabled={attendanceAiMutation.isPending || !aiReady}>
+              {attendanceAiMutation.isPending ? "Generating..." : "Generate intervention"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!aiReady ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              AI access is not enabled for this account. Add a tenant key or use the trial AI window to enable attendance intervention guidance.
+            </div>
+          ) : null}
+          {attendanceIntervention ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3">
+                <SummaryRow label="Risk level" value={attendanceIntervention.riskLevel} />
+                <SummaryRow label="Confidence" value={`${Math.round(attendanceIntervention.confidence * 100)}%`} />
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Overview</p>
+                  <p className="mt-2 text-sm text-foreground">{attendanceIntervention.overview}</p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Key signals</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {attendanceIntervention.keySignals.map((signal) => (
+                      <Badge key={signal} variant="outline">
+                        {signal}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recommended actions</p>
+                  <div className="mt-3 space-y-2">
+                    {attendanceIntervention.recommendedActions.map((action) => (
+                      <p key={action} className="rounded-2xl border border-border/70 bg-background px-3 py-2 text-sm shadow-sm">
+                        {action}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Parent message draft</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{attendanceIntervention.parentMessageDraft}</p>
+                </div>
+                <div className="rounded-2xl border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Staff note</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{attendanceIntervention.staffNote}</p>
+                  <Badge className="mt-3" variant={attendanceIntervention.escalationNeeded ? "warning" : "success"}>
+                    {attendanceIntervention.escalationNeeded ? "Escalation recommended" : "No escalation required"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Generate an intervention from the current page or a selected record to guide follow-up with family and staff.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+      <div className="flex flex-wrap gap-2">
+        <AttendanceBulkImportDialog />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => attendanceAutomationMutation.mutate()}
+          disabled={!canManage || attendanceAutomationMutation.isPending}
+        >
+          {attendanceAutomationMutation.isPending ? "Running follow-ups..." : "Run attendance follow-ups"}
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ module: "attendance" })}>Audit attendance events</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Audit bulk deletes</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "create" })}>Audit attendance creation</Link>
+        </Button>
       </div>
       <ChartCard title="Attendance distribution">
         <div className="h-72">
@@ -298,6 +567,51 @@ export default function AttendancePage() {
           ) : null
         }
       />
+      {selectedAttendanceIds.length > 0 && canManage ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedAttendanceIds.length} attendance record{selectedAttendanceIds.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => bulkStatusMutation.mutate("PRESENT")} disabled={bulkStatusMutation.isPending}>
+              Mark present
+            </Button>
+            <Button variant="outline" onClick={() => bulkStatusMutation.mutate("ABSENT")} disabled={bulkStatusMutation.isPending}>
+              Mark absent
+            </Button>
+            <Button variant="outline" onClick={() => bulkStatusMutation.mutate("LATE")} disabled={bulkStatusMutation.isPending}>
+              Mark late
+            </Button>
+            <Button variant="outline" onClick={() => bulkStatusMutation.mutate("LEAVE")} disabled={bulkStatusMutation.isPending}>
+              Mark leave
+            </Button>
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "attendance-records-selected", rows: selectedAttendanceExportRows })}
+              disabled={selectedAttendanceExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => bulkDeleteMutation.mutate(selectedAttendanceIds)}
+              disabled={bulkDeleteMutation.isPending || bulkStatusMutation.isPending || bulkFollowUpMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => bulkFollowUpMutation.mutate()}
+              disabled={bulkFollowUpMutation.isPending || selectedAttendanceIds.length === 0}
+            >
+              {bulkFollowUpMutation.isPending ? "Creating..." : "Create follow-up reminders"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <DataTable
         data={filteredAttendance}
         columns={columns}
@@ -308,6 +622,9 @@ export default function AttendancePage() {
             setPageIndex(state.pageIndex);
           }
         }}
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
       <Dialog open={Boolean(selectedRecord)} onOpenChange={(nextOpen) => !nextOpen && setSelectedRecord(null)}>
         <DialogContent>
@@ -332,4 +649,13 @@ export default function AttendancePage() {
 
 function indexOfStatus(status: string) {
   return ["PRESENT", "ABSENT", "LATE", "LEAVE"].indexOf(status);
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-3 shadow-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
+  );
 }

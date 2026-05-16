@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { BadgeCheck, Building2, KeyRound, ShieldCheck } from "lucide-react";
+import { BadgeCheck, Building2, KeyRound, ShieldCheck, Sparkles } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -20,6 +20,7 @@ import { usersApi } from "@/features/users/api/users-api";
 import { normalizeApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/formatters";
 import { useAuth } from "@/providers/auth-provider";
+import { getAiAccessLabel, hasAiAccess } from "@/lib/ai/access";
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -99,7 +100,7 @@ export default function ProfilePage() {
       <PageHeader
         eyebrow="Account"
         title="Profile"
-        description="Review your identity, access footprint, tenant context, and update the personal details attached to the current session."
+        description="Review your identity, access footprint, tenant context, and update the personal details attached to the current signed-in account."
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -108,6 +109,19 @@ export default function ProfilePage() {
           helper={user.organizationId ? "Tenant-scoped workspace" : "Global super admin console"}
           icon={Building2}
           tone="sky"
+        />
+        <MetricCard
+          title="AI Automation"
+          value={hasAiAccess(user) ? getAiAccessLabel(user) : "Key missing"}
+          helper={
+            hasAiAccess(user)
+              ? user.hasOpenAiApiKey
+                ? "Tenant OpenAI key is configured for AI notices, mail, support, and admission extraction"
+                : "Trial AI is enabled with a limited shared Groq quota."
+              : "Add a tenant AI key to unlock AI workflows for this account"
+          }
+          icon={Sparkles}
+          tone={hasAiAccess(user) ? "emerald" : "amber"}
         />
         <MetricCard
           title="Assigned Roles"
@@ -119,14 +133,14 @@ export default function ProfilePage() {
         <MetricCard
           title="Granted Permissions"
           value={String(user.permissions.length)}
-          helper="Effective permissions in this session"
+          helper="Effective permissions on this account"
           icon={KeyRound}
           tone="amber"
         />
         <MetricCard
           title="Account Status"
           value="Active"
-          helper="This session is currently eligible to access the platform"
+          helper="This account is currently eligible to access the platform"
           icon={BadgeCheck}
           tone="emerald"
         />
@@ -166,7 +180,7 @@ export default function ProfilePage() {
                 ))}
               </div>
             </div>
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm">
               Profile updates preserve your current role assignment and tenant context. If you change your email or password, the account remains active under the same access footprint.
             </div>
           </CardContent>
@@ -191,7 +205,7 @@ export default function ProfilePage() {
               <FormField label="New password" error={form.formState.errors.password} className="md:col-span-2">
                 <Input type="password" {...form.register("password")} placeholder="Leave blank to keep current password" />
               </FormField>
-              <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground md:col-span-2">
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm md:col-span-2">
                 <p><span className="font-medium text-foreground">Last profile sync:</span> {formatDate(new Date())}</p>
               </div>
               <div className="md:col-span-2 flex justify-end">
@@ -208,15 +222,15 @@ export default function ProfilePage() {
             <CardDescription>What this screen controls and what still remains administrative.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm">
               <p className="font-medium text-foreground">Editable here</p>
               <p className="mt-2">Name, login email, and password are user-owned profile settings and can be updated directly from this page.</p>
             </div>
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm">
               <p className="font-medium text-foreground">Managed by admins</p>
               <p className="mt-2">Roles, permissions, activation state, and tenant assignment remain administrative controls outside personal profile management.</p>
             </div>
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm">
               <p className="font-medium text-foreground">Recommended practice</p>
               <p className="mt-2">Use a unique email per operator and rotate passwords periodically, especially for super admin and finance-facing accounts.</p>
             </div>

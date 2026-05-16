@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Banknote, CalendarDays, CircleAlert, Download, FileSpreadsheet, Landmark, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -38,15 +38,29 @@ import { MetricCard } from "@/components/cards/metric-card";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { activityLogsApi } from "@/features/activity-logs/api/activity-logs-api";
+import { usePermission } from "@/hooks/use-permission";
+import { useSavedFilterPresets } from "@/hooks/use-saved-filter-presets";
 import { formatCurrency } from "@/lib/formatters";
+import { exportRowsToCsv } from "@/lib/utils/export";
 import { useAuth } from "@/providers/auth-provider";
 import { metricCardData } from "@/lib/utils/dashboard";
 import { getChartColor } from "@/lib/constants/chart-colors";
+import type { ActivityLog, WeeklyPrincipalSummary } from "@/types/domain";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function ReportsPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.roles.includes("SUPER_ADMIN") ?? false;
+  const canReadActivityLogs = usePermission("activity-logs.read");
+  const [selectedSection, setSelectedSection] = useState("all");
+  const [selectedPresetId, setSelectedPresetId] = useState("");
+  const savedReportPresets = useSavedFilterPresets<{
+    section: string;
+  }>("reports-section-presets");
   const summaryQuery = useQuery({ queryKey: ["reports", "summary", "page"], queryFn: reportsApi.summary });
   const feeCollectionOverviewQuery = useQuery({
     queryKey: ["reports", "fees", "collection-overview"],
@@ -122,17 +136,63 @@ export default function ReportsPage() {
     queryKey: ["reports", "academics", "result-status"],
     queryFn: reportsApi.resultStatusSummary,
   });
+  const activityLogsQuery = useQuery({
+    queryKey: ["reports", "activity-logs", "snapshot"],
+    queryFn: () =>
+      activityLogsApi.list({
+        page: 1,
+        limit: 20,
+        sortBy: "createdAt",
+        sortOrder: "desc",
+      }),
+    enabled: canReadActivityLogs,
+  });
   const organizationsQuery = useQuery({
     queryKey: ["organizations", "reports-growth"],
     queryFn: () => organizationsApi.list({ page: 1, limit: 100 }),
     enabled: isSuperAdmin,
   });
+  const tenantSettingsQuery = useQuery({
+    queryKey: ["organization-settings", "reports-page"],
+    queryFn: organizationsApi.currentSettings,
+    enabled: Boolean(user?.organizationId),
+  });
+  const weeklyPrincipalSummaryMutation = useMutation({
+    mutationFn: async () => reportsApi.weeklyPrincipalSummary(),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not generate weekly summary"),
+  });
+  const dashboardSummary = summaryQuery.data ?? {
+    totalStudents: 0,
+    activeStudents: 0,
+    monthlyFeeCollection: 0,
+    unpaidFeeCount: 0,
+    presentAttendanceCount: 0,
+  };
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
 
-  if (summaryQuery.isLoading) return <LoadingState rows={6} />;
-  if (summaryQuery.isError || !summaryQuery.data) return <ErrorState description="Reports summary could not be loaded." />;
+  useEffect(() => {
+    const target = selectedSection === "all" ? null : document.getElementById(`report-section-${selectedSection}`);
+    if (!target) {
+      return;
+    }
+
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selectedSection]);
 
   const feeOverview = feeCollectionOverviewQuery.data;
   const feeComparison = feePeriodComparisonQuery.data ?? [];
+  const academicSummary = academicSummaryQuery.data;
+  const tenantSettings = tenantSettingsQuery.data ?? null;
+  const weeklyPrincipalSummary = weeklyPrincipalSummaryMutation.data ?? null;
   const toTrend = (currentValue: number, previousValue: number): number | undefined => {
     if (previousValue <= 0) {
       return currentValue > 0 ? 100 : undefined;
@@ -240,51 +300,122 @@ export default function ReportsPage() {
         },
       ]
     : [];
-  const downloadCsv = (filename: string, rows: string[][]) => {
-    const csvContent = rows
-      .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    window.URL.revokeObjectURL(url);
-  };
+  const financeSnapshotRows = useMemo<Array<Record<string, string | number>>>(() => {
+    if (!feeOverview) {
+      return [];
+    }
+
+    const rows: Array<Record<string, string | number>> = [
+      {
+        Section: "Finance overview",
+        Period: "Current month",
+        Billed: formatCurrency(feeOverview.currentMonth.billed),
+        Collected: formatCurrency(feeOverview.currentMonth.collected),
+        Pending: formatCurrency(feeOverview.currentMonth.pending),
+        Overdue: formatCurrency(feeOverview.currentMonth.overdue),
+        "Collection Rate": `${feeOverview.currentMonth.collectionRate}%`,
+      },
+      {
+        Section: "Finance overview",
+        Period: "Current quarter",
+        Billed: formatCurrency(feeOverview.currentQuarter.billed),
+        Collected: formatCurrency(feeOverview.currentQuarter.collected),
+        Pending: formatCurrency(feeOverview.currentQuarter.pending),
+        Overdue: formatCurrency(feeOverview.currentQuarter.overdue),
+        "Collection Rate": `${feeOverview.currentQuarter.collectionRate}%`,
+      },
+      {
+        Section: "Finance overview",
+        Period: "Current year",
+        Billed: formatCurrency(feeOverview.currentYear.billed),
+        Collected: formatCurrency(feeOverview.currentYear.collected),
+        Pending: formatCurrency(feeOverview.currentYear.pending),
+        Overdue: formatCurrency(feeOverview.currentYear.overdue),
+        "Collection Rate": `${feeOverview.currentYear.collectionRate}%`,
+      },
+    ];
+
+    feeComparison.forEach((item) => {
+      rows.push({
+        Section: "Finance comparison",
+        Period: item.period,
+        "Current Collected": formatCurrency(item.currentCollected),
+        "Previous Collected": formatCurrency(item.previousCollected),
+        "Current Pending": formatCurrency(item.currentPending),
+        "Previous Pending": formatCurrency(item.previousPending),
+      });
+    });
+
+    return rows;
+  }, [feeComparison, feeOverview]);
+  const academicSnapshotRows = useMemo<Array<Record<string, string | number>>>(() => {
+    if (!academicSummary) {
+      return [];
+    }
+
+    const rows: Array<Record<string, string | number>> = [
+      { Section: "Academic summary", Metric: "Total exams", Value: academicSummary.totalExams },
+      { Section: "Academic summary", Metric: "Published exams", Value: academicSummary.publishedExams },
+      { Section: "Academic summary", Metric: "Total results", Value: academicSummary.totalResults },
+      { Section: "Academic summary", Metric: "Published results", Value: academicSummary.publishedResults },
+      { Section: "Academic summary", Metric: "Average percentage", Value: `${academicSummary.averagePercentage.toFixed(1)}%` },
+    ];
+
+    (gradeDistributionQuery.data ?? []).forEach((item) => {
+      rows.push({
+        Section: "Grade distribution",
+        Metric: item.grade,
+        Value: item.total,
+      });
+    });
+
+    (batchPerformanceQuery.data ?? []).forEach((item) => {
+      rows.push({
+        Section: "Batch performance",
+        Metric: `${item.batchCode} - ${item.batchName}`,
+        Value: `${item.averagePercentage.toFixed(1)}%`,
+      });
+    });
+
+    (resultStatusQuery.data ?? []).forEach((item) => {
+      rows.push({
+        Section: "Result status",
+        Metric: item.status,
+        Value: item.total,
+      });
+    });
+
+    (examScheduleTrendQuery.data ?? []).forEach((item) => {
+      rows.push({
+        Section: "Exam schedule trend",
+        Metric: item.month,
+        Value: item.count,
+      });
+    });
+
+    return rows;
+  }, [academicSummary, batchPerformanceQuery.data, examScheduleTrendQuery.data, gradeDistributionQuery.data, resultStatusQuery.data]);
+  const activityLogSnapshotRows = useMemo<Array<Record<string, string | number>>>(() => {
+    return (activityLogsQuery.data?.items ?? []).map((log) => ({
+      When: formatShortDateTime(log.createdAt),
+      Actor: log.actorUser ? `${log.actorUser.firstName} ${log.actorUser.lastName}` : "System / Anonymous",
+      ActorEmail: log.actorUser?.email ?? "",
+      Module: log.module,
+      Action: log.action,
+      Target: log.targetId ?? "General",
+      Details: summarizeMetadata(log),
+    }));
+  }, [activityLogsQuery.data]);
   const handleExportOverview = () => {
     if (!feeOverview) {
       toast.error("Fee collection overview is not available yet.");
       return;
     }
 
-    downloadCsv("fee-collection-overview.csv", [
-      ["Period", "Billed", "Collected", "Pending", "Overdue", "Collection Rate"],
-      [
-        "Month",
-        String(feeOverview.currentMonth.billed),
-        String(feeOverview.currentMonth.collected),
-        String(feeOverview.currentMonth.pending),
-        String(feeOverview.currentMonth.overdue),
-        `${feeOverview.currentMonth.collectionRate}%`,
-      ],
-      [
-        "Quarter",
-        String(feeOverview.currentQuarter.billed),
-        String(feeOverview.currentQuarter.collected),
-        String(feeOverview.currentQuarter.pending),
-        String(feeOverview.currentQuarter.overdue),
-        `${feeOverview.currentQuarter.collectionRate}%`,
-      ],
-      [
-        "Year",
-        String(feeOverview.currentYear.billed),
-        String(feeOverview.currentYear.collected),
-        String(feeOverview.currentYear.pending),
-        String(feeOverview.currentYear.overdue),
-        `${feeOverview.currentYear.collectionRate}%`,
-      ],
-    ]);
+    exportRowsToCsv({
+      filename: "fee-collection-overview",
+      rows: financeSnapshotRows.slice(0, 3),
+    });
     toast.success("Finance overview exported");
   };
   const handleExportComparison = () => {
@@ -293,19 +424,53 @@ export default function ReportsPage() {
       return;
     }
 
-    downloadCsv("fee-period-comparison.csv", [
-      ["Period", "Current Collected", "Previous Collected", "Current Pending", "Previous Pending"],
-      ...feeComparison.map((item) => [
-        item.period,
-        String(item.currentCollected),
-        String(item.previousCollected),
-        String(item.currentPending),
-        String(item.previousPending),
-      ]),
-    ]);
+    exportRowsToCsv({
+      filename: "fee-period-comparison",
+      rows: financeSnapshotRows.slice(3),
+    });
     toast.success("Period comparison exported");
   };
-  const academicSummary = academicSummaryQuery.data;
+  const handleExportFinanceSnapshot = () => {
+    if (financeSnapshotRows.length === 0) {
+      toast.error("Finance snapshot is not available yet.");
+      return;
+    }
+
+    exportRowsToCsv({
+      filename: "finance-report-snapshot",
+      rows: financeSnapshotRows,
+    });
+    toast.success("Finance snapshot exported");
+  };
+  const handleExportAcademicSnapshot = () => {
+    if (academicSnapshotRows.length === 0) {
+      toast.error("Academic snapshot is not available yet.");
+      return;
+    }
+
+    exportRowsToCsv({
+      filename: "academic-report-snapshot",
+      rows: academicSnapshotRows,
+    });
+    toast.success("Academic snapshot exported");
+  };
+  const handleExportActivitySnapshot = () => {
+    if (!canReadActivityLogs) {
+      toast.error("You do not have permission to export activity logs.");
+      return;
+    }
+
+    if (activityLogSnapshotRows.length === 0) {
+      toast.error("Activity log snapshot is not available yet.");
+      return;
+    }
+
+    exportRowsToCsv({
+      filename: "activity-log-snapshot",
+      rows: activityLogSnapshotRows,
+    });
+    toast.success("Activity log snapshot exported");
+  };
   const academicCards = academicSummary
     ? [
         {
@@ -370,7 +535,19 @@ export default function ReportsPage() {
         q3: getQuantile(batchPerformanceValues, 0.75),
         max: batchPerformanceValues[batchPerformanceValues.length - 1],
       }
-    : null;
+      : null;
+  const monthComparison = feeComparison.find((item) => item.period === "MONTH") ?? null;
+  const enrollmentTrendPoints = enrollmentTrendQuery.data ?? [];
+  const previousEnrollmentPoint = enrollmentTrendPoints.at(-2) ?? null;
+  const currentEnrollmentPoint = enrollmentTrendPoints.at(-1) ?? null;
+  const enrollmentTrendComparison =
+    currentEnrollmentPoint && previousEnrollmentPoint
+      ? {
+          current: currentEnrollmentPoint.count,
+          previous: previousEnrollmentPoint.count,
+          delta: currentEnrollmentPoint.count - previousEnrollmentPoint.count,
+        }
+      : null;
   const organizationGrowth = useMemo(() => {
     const items = organizationsQuery.data?.items ?? [];
     const byMonth = new Map<string, { month: string; organizations: number; students: number }>();
@@ -395,13 +572,281 @@ export default function ReportsPage() {
       .sort((left, right) => right[1] - left[1])
       .map(([moduleName, total]) => ({ moduleName: moduleName.replaceAll("_", " "), total }));
   }, [organizationsQuery.data]);
+  const kpiComparisonCards = [
+    monthComparison
+      ? {
+          title: "Monthly collections",
+          current: formatCurrency(monthComparison.currentCollected),
+          previous: formatCurrency(monthComparison.previousCollected),
+          delta: monthComparison.currentCollected - monthComparison.previousCollected,
+          deltaLabel: "collected vs previous month",
+          tone: monthComparison.currentCollected >= monthComparison.previousCollected ? ("emerald" as const) : ("rose" as const),
+        }
+      : null,
+    monthComparison
+      ? {
+          title: "Monthly pending",
+          current: formatCurrency(monthComparison.currentPending),
+          previous: formatCurrency(monthComparison.previousPending),
+          delta: monthComparison.currentPending - monthComparison.previousPending,
+          deltaLabel: "pending vs previous month",
+          tone: monthComparison.currentPending <= monthComparison.previousPending ? ("emerald" as const) : ("amber" as const),
+        }
+      : null,
+    enrollmentTrendComparison
+      ? {
+          title: "Student growth",
+          current: String(enrollmentTrendComparison.current),
+          previous: String(enrollmentTrendComparison.previous),
+          delta: enrollmentTrendComparison.delta,
+          deltaLabel: "new enrollments vs previous month",
+          tone: enrollmentTrendComparison.delta >= 0 ? ("emerald" as const) : ("rose" as const),
+        }
+      : null,
+    {
+      title: "Attendance present",
+      current: String(dashboardSummary.presentAttendanceCount),
+      previous: "Previous month baseline",
+      delta: undefined as number | undefined,
+      deltaLabel: "current attendance snapshot",
+      tone: "sky" as const,
+    },
+  ].filter(Boolean) as Array<{
+    title: string;
+    current: string;
+    previous: string;
+    delta: number | undefined;
+    deltaLabel: string;
+    tone: "sky" | "emerald" | "amber" | "rose" | "violet";
+  }>;
+  const attendanceTotals = useMemo(() => {
+    const totals = (attendanceStatusQuery.data ?? []).reduce(
+      (acc, item) => {
+        if (item.status === "PRESENT") acc.present += item.total;
+        if (item.status === "ABSENT") acc.absent += item.total;
+        if (item.status === "LATE") acc.late += item.total;
+        if (item.status === "LEAVE") acc.leave += item.total;
+        return acc;
+      },
+      { present: 0, absent: 0, late: 0, leave: 0 },
+    );
+    return totals;
+  }, [attendanceStatusQuery.data]);
+  const coreModules = ["USERS", "STUDENTS", "FEES", "ATTENDANCE", "ACADEMICS", "SETTINGS"] as const;
+  const missingCoreModules = useMemo(() => {
+    const enabled = tenantSettings?.enabledModules ?? user?.enabledModules ?? [];
+    return coreModules.filter((module) => !enabled.includes(module));
+  }, [tenantSettings?.enabledModules, user?.enabledModules]);
+  const topRisks = useMemo(() => {
+    const risks: Array<{
+      title: string;
+      description: string;
+      tone: "rose" | "amber" | "sky";
+      action: string;
+      actionLabel: string;
+      detail: string;
+    }> = [];
+
+    if (tenantSettings) {
+      const trialExpired =
+        tenantSettings.subscriptionStatus === "TRIAL" &&
+        tenantSettings.trialEndsAt !== null &&
+        new Date(tenantSettings.trialEndsAt).getTime() <= Date.now();
+      const trialExpiringSoon =
+        tenantSettings.subscriptionStatus === "TRIAL" &&
+        tenantSettings.trialEndsAt !== null &&
+        !trialExpired &&
+        new Date(tenantSettings.trialEndsAt).getTime() - Date.now() <= 7 * 24 * 60 * 60 * 1000;
+
+      if (trialExpired || trialExpiringSoon || tenantSettings.subscriptionStatus === "PAST_DUE" || tenantSettings.subscriptionStatus === "SUSPENDED") {
+        risks.push({
+          title: trialExpired ? "Trial expired" : "Billing needs attention",
+          description: trialExpired
+            ? "The workspace trial has ended and access should be reviewed."
+            : "The workspace is close to a billing or access boundary.",
+          tone: trialExpired ? "rose" : "amber",
+          action: "/settings",
+          actionLabel: "Open settings",
+          detail: trialExpired
+            ? "Access and billing state are already beyond the trial window."
+            : "A billing status change is approaching.",
+        });
+      }
+
+      if (missingCoreModules.length > 0) {
+        risks.push({
+          title: "Inactive modules",
+          description: `${missingCoreModules.length} core modules are not enabled in this tenant.`,
+          tone: "sky",
+          action: "/settings",
+          actionLabel: "Review modules",
+          detail: missingCoreModules.map((module) => module.replaceAll("_", " ")).join(", "),
+        });
+      }
+    }
+
+    const overdue = feeOverview?.currentMonth.overdue ?? 0;
+    if (overdue > 0) {
+      risks.push({
+        title: "Overdue fees",
+        description: `${formatCurrency(overdue)} is overdue this month.`,
+        tone: overdue > 0 ? "rose" : "amber",
+        action: "/fees?status=OVERDUE",
+        actionLabel: "Open overdue fees",
+        detail: "Follow up before the overdue balance grows further.",
+      });
+    }
+
+    const followUp = attendanceTotals.absent + attendanceTotals.late;
+    if (followUp > 0) {
+      const isSevere = attendanceTotals.present > 0 ? followUp >= attendanceTotals.present : followUp >= 10;
+      risks.push({
+        title: "Attendance follow-up",
+        description: `${followUp} attendance records need attention.`,
+        tone: isSevere ? "rose" : "amber",
+        action: "/attendance",
+        actionLabel: "Open attendance",
+        detail: `${attendanceTotals.present} present, ${attendanceTotals.absent} absent, ${attendanceTotals.late} late, ${attendanceTotals.leave} on leave.`,
+      });
+    }
+
+    return risks.slice(0, 4);
+  }, [attendanceTotals.absent, attendanceTotals.late, attendanceTotals.leave, attendanceTotals.present, feeOverview, missingCoreModules, tenantSettings]);
+  const exportPresets = [
+    {
+      title: "Overview pack",
+      description: "Summary KPIs and the current workspace overview.",
+      action: handleExportOverview,
+      available: true,
+    },
+    {
+      title: "Finance pack",
+      description: "Fee overview, period comparison, and collection snapshots.",
+      action: handleExportFinanceSnapshot,
+      available: Boolean(feeOverview),
+    },
+    {
+      title: "Academic pack",
+      description: "Academic summary, grades, results, and batch performance.",
+      action: handleExportAcademicSnapshot,
+      available: Boolean(academicSummary),
+    },
+    {
+      title: "Activity pack",
+      description: "Operational audit snapshot for users with log access.",
+      action: handleExportActivitySnapshot,
+      available: canReadActivityLogs,
+    },
+    {
+      title: "Tenant pack",
+      description: "Tenant growth and module adoption for super admins.",
+      action: () => {
+        exportRowsToCsv({
+          filename: "tenant-growth-snapshot",
+          rows: organizationGrowth.map((item) => ({
+            Month: item.month,
+            Organizations: item.organizations,
+            Students: item.students,
+          })),
+        });
+        toast.success("Tenant growth exported");
+      },
+      available: isSuperAdmin && organizationGrowth.length > 0,
+    },
+  ].filter((preset) => preset.available);
+  const sectionOptions = [
+    { value: "all", label: "All" },
+    { value: "finance", label: "Finance" },
+    { value: "academics", label: "Academics" },
+    { value: "operations", label: "Operations" },
+    { value: "tenancy", label: "Tenancy" },
+    { value: "activity", label: "Activity" },
+  ];
+  const homeInsights = [
+    {
+      title: "Finance pulse",
+      value: feeOverview ? formatCurrency(feeOverview.currentMonth.pending) : "—",
+      helper: feeOverview ? "Open this month" : "Finance data is still loading",
+      action: "/fees?status=PENDING",
+      actionLabel: "Review pending fees",
+    },
+    {
+      title: "Attendance pulse",
+      value: String(dashboardSummary.presentAttendanceCount),
+      helper: "Present today across the workspace",
+      action: "/attendance",
+      actionLabel: "Open attendance",
+    },
+    {
+      title: "Academic pulse",
+      value: academicSummary ? `${academicSummary.averagePercentage.toFixed(1)}%` : "—",
+      helper: academicSummary ? "Average result percentage" : "Academic data is still loading",
+      action: "/exam-results",
+      actionLabel: "Open results",
+    },
+    ...(isSuperAdmin
+      ? [
+          {
+            title: "Tenant pulse",
+            value: organizationsQuery.data ? String(organizationsQuery.data.total) : "—",
+            helper: "Organizations in scope",
+            action: "/organizations",
+            actionLabel: "Open organizations",
+          },
+        ]
+      : []),
+  ];
+
+  const dailyDigest = useMemo(() => {
+    const financeLine = feeOverview
+      ? `${formatCurrency(feeOverview.currentMonth.pending)} pending and ${formatCurrency(feeOverview.currentMonth.overdue)} overdue this month.`
+      : "Finance data is still loading.";
+    const attendanceLine = `Present attendance count in the current summary is ${dashboardSummary.presentAttendanceCount}.`;
+    const reminderLine = reminderStatusQuery.data
+      ? `${reminderStatusQuery.data.reduce((sum, item) => sum + item.total, 0)} reminder logs are visible in the current reporting window.`
+      : "Reminder data is still loading.";
+    const academicLine = academicSummary
+      ? `Academic average stands at ${academicSummary.averagePercentage.toFixed(1)}%.`
+      : "Academic summary is still loading.";
+
+    return [
+      `Daily admin digest for ${user?.organizationName ?? "the current organization"}`,
+      financeLine,
+      attendanceLine,
+      reminderLine,
+      academicLine,
+      feeOverview ? `Follow up overdue balances first: ${formatCurrency(feeOverview.currentMonth.overdue)} is already overdue.` : "No fee follow-up risk data available yet.",
+      "Recommended action: review overdue fees, attendance exceptions, and reminder delivery before the end of the day.",
+    ].join("\n");
+  }, [academicSummary, dashboardSummary.presentAttendanceCount, feeOverview, reminderStatusQuery.data, user?.organizationName]);
+
+  const copyDailyDigest = async () => {
+    try {
+      await navigator.clipboard.writeText(dailyDigest);
+      toast.success("Daily digest copied");
+    } catch {
+      toast.error("Could not copy daily digest");
+    }
+  };
+
+  const runWeeklyPrincipalSummary = async () => {
+    try {
+      await weeklyPrincipalSummaryMutation.mutateAsync();
+      toast.success("Weekly principal summary generated");
+    } catch {
+      // handled in onError
+    }
+  };
+
+  if (summaryQuery.isLoading) return <LoadingState rows={6} />;
+  if (summaryQuery.isError || !summaryQuery.data) return <ErrorState description="Reports summary could not be loaded." />;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Analytics"
+        eyebrow="Analytics home"
         title="Reports and analytics"
-        description="Organization-level collection, pending dues, attendance, student growth, and reminder performance in one reporting workspace."
+        description="A single workspace for finance, attendance, academics, reminders, and tenant growth."
         actions={
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
             <Button variant="outline" onClick={handleExportOverview}>
@@ -412,6 +857,20 @@ export default function ReportsPage() {
               <Download className="mr-2 h-4 w-4" />
               Export comparison
             </Button>
+            <Button variant="outline" onClick={handleExportFinanceSnapshot}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Export finance snapshot
+            </Button>
+            <Button variant="outline" onClick={handleExportAcademicSnapshot}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Export academics snapshot
+            </Button>
+            {canReadActivityLogs ? (
+              <Button variant="outline" onClick={handleExportActivitySnapshot}>
+                <Download className="mr-2 h-4 w-4" />
+                Export activity snapshot
+              </Button>
+            ) : null}
             <Button asChild>
               <Link href="/fees?status=OVERDUE">
                 <CircleAlert className="mr-2 h-4 w-4" />
@@ -421,13 +880,276 @@ export default function ReportsPage() {
           </div>
         }
       />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {metricCardData(summaryQuery.data).map((metric) => (
+      <div className="grid gap-4 lg:grid-cols-4">
+        {homeInsights.map((insight) => (
+          <Card key={insight.title} className="border-border/70 bg-card/80 shadow-sm backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{insight.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-3xl font-semibold tracking-tight">{insight.value}</p>
+                <p className="mt-1 text-sm leading-5 text-muted-foreground">{insight.helper}</p>
+              </div>
+              <Button asChild variant="outline" className="w-full">
+                <Link href={insight.action}>{insight.actionLabel}</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card className="border-border/70 bg-card/80 shadow-sm backdrop-blur" id="report-section-digest">
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle>Daily admin digest</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">A short operational summary you can copy into a team update or morning brief.</p>
+          </div>
+          <Button variant="outline" onClick={copyDailyDigest}>
+            Copy digest
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <pre className="whitespace-pre-wrap rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm leading-7 text-foreground shadow-sm">{dailyDigest}</pre>
+        </CardContent>
+      </Card>
+      <Card className="border-border/70 bg-card/80 shadow-sm backdrop-blur" id="report-section-weekly-summary">
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle>Weekly principal summary</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Generate a leadership-ready summary from current report signals.</p>
+          </div>
+          <Button variant="outline" onClick={() => runWeeklyPrincipalSummary()} disabled={weeklyPrincipalSummaryMutation.isPending}>
+            {weeklyPrincipalSummaryMutation.isPending ? "Generating..." : "Generate summary"}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {weeklyPrincipalSummary ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Headline</p>
+                <p className="mt-2 text-sm font-medium text-foreground">{weeklyPrincipalSummary.headline}</p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Overview</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-foreground">{weeklyPrincipalSummary.overview}</p>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Highlights</p>
+                  <ul className="mt-3 space-y-2 text-sm text-foreground">
+                    {weeklyPrincipalSummary.highlights.map((item) => (
+                      <li key={item} className="rounded-xl border border-border/60 bg-background px-3 py-2 shadow-sm">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Risks</p>
+                  <ul className="mt-3 space-y-2 text-sm text-foreground">
+                    {weeklyPrincipalSummary.risks.map((item) => (
+                      <li key={item} className="rounded-xl border border-border/60 bg-background px-3 py-2 shadow-sm">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Next actions</p>
+                  <ul className="mt-3 space-y-2 text-sm text-foreground">
+                    {weeklyPrincipalSummary.nextActions.map((item) => (
+                      <li key={item} className="rounded-xl border border-border/60 bg-background px-3 py-2 shadow-sm">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Generated for {weeklyPrincipalSummary.organizationName} on {new Date(weeklyPrincipalSummary.generatedAt).toLocaleString()}.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Run the generator to produce a short weekly summary for principals or leadership meetings.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+      {kpiComparisonCards.length ? (
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+          {kpiComparisonCards.map((card) => (
+            <Card key={card.title} className="border-border/70 bg-card/80 shadow-sm backdrop-blur">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{card.title}</CardTitle>
+                  <Badge variant={card.tone === "rose" ? "danger" : card.tone === "amber" ? "warning" : "outline"}>{card.deltaLabel}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-3xl font-semibold tracking-tight">{card.current}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Previous: {card.previous}</p>
+                  </div>
+                  {card.delta !== undefined ? (
+                    <Badge variant={card.delta >= 0 ? "success" : "danger"}>{card.delta >= 0 ? "+" : ""}
+                      {card.delta}</Badge>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : null}
+      {topRisks.length ? (
+        <Card className="border-rose-200 bg-rose-50/70">
+          <CardHeader>
+            <CardTitle>Top risks</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 lg:grid-cols-2">
+            {topRisks.map((risk) => (
+              <div key={risk.title} className="rounded-[1.75rem] border border-rose-200 bg-white/80 p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <Badge variant={risk.tone === "rose" ? "danger" : risk.tone === "amber" ? "warning" : "outline"}>{risk.title}</Badge>
+                    <p className="text-sm text-muted-foreground">{risk.description}</p>
+                    <p className="text-xs text-muted-foreground">{risk.detail}</p>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={risk.action}>{risk.actionLabel}</Link>
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+      {exportPresets.length ? (
+        <Card className="border-sky-200 bg-sky-50/70">
+          <CardHeader>
+            <CardTitle>Role-aware export presets</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {exportPresets.map((preset) => (
+              <div key={preset.title} className="rounded-[1.75rem] border border-sky-200 bg-white/80 p-4 shadow-sm">
+                <p className="font-medium">{preset.title}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{preset.description}</p>
+                <Button className="mt-4 w-full" variant="outline" onClick={preset.action}>
+                  Export preset
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 px-4 py-3 text-sm shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Focused section</span>
+          <Select
+            value={selectedSection}
+            onValueChange={(value) => setSelectedSection(value)}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select section" />
+            </SelectTrigger>
+            <SelectContent>
+              {sectionOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {sectionOptions.filter((option) => option.value !== "all").map((option) => (
+            <Button key={option.value} variant={selectedSection === option.value ? "default" : "outline"} size="sm" onClick={() => setSelectedSection(option.value)}>
+              {option.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const name = window.prompt("Save this report section as:");
+              const preset = name ? savedReportPresets.savePreset(name, { section: selectedSection }) : null;
+              if (preset) {
+                setSelectedPresetId(preset.id);
+                toast.success(`Saved view "${preset.name}"`);
+              }
+            }}
+          >
+            Save current view
+          </Button>
+          <Select
+            value={selectedPresetId}
+            onValueChange={(presetId) => {
+              const preset = savedReportPresets.presets.find((item) => item.id === presetId);
+              if (!preset) return;
+              setSelectedSection(preset.value.section);
+              setSelectedPresetId(preset.id);
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Load saved view" />
+            </SelectTrigger>
+            <SelectContent>
+              {savedReportPresets.presets.length === 0 ? (
+                <SelectItem value="__none" disabled>
+                  No saved views yet
+                </SelectItem>
+              ) : (
+                savedReportPresets.presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              savedReportPresets.clearPresets();
+              setSelectedPresetId("");
+              toast.success("Saved report views cleared");
+            }}
+            disabled={savedReportPresets.presets.length === 0}
+          >
+            Clear saved views
+          </Button>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={() => setSelectedSection("finance")}>Jump to finance</Button>
+        <Button variant="outline" size="sm" onClick={() => setSelectedSection("academics")}>Jump to academics</Button>
+        <Button variant="outline" size="sm" onClick={() => setSelectedSection("operations")}>Jump to operations</Button>
+        <Button variant="outline" size="sm" onClick={() => setSelectedSection("tenancy")}>Jump to tenancy</Button>
+        <Button variant="outline" size="sm" onClick={() => setSelectedSection("activity")}>Jump to activity</Button>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4" id="report-section-activity">
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Audit bulk deletes</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-status" })}>Audit bulk status</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-publish" })}>Audit bulk publish</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ module: "fees" })}>Audit billing activity</Link>
+        </Button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" id="report-section-overview">
+        {metricCardData(dashboardSummary).map((metric) => (
           <MetricCard key={metric.title} {...metric} />
         ))}
       </div>
       {feeOverview ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5" id="report-section-finance-cards">
           {feePeriodCards.map((metric) => (
             <MetricCard
               key={metric.title}
@@ -442,14 +1164,14 @@ export default function ReportsPage() {
         </div>
       ) : null}
       {academicSummary ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" id="report-section-academics">
           {academicCards.map((metric) => (
             <MetricCard key={metric.title} title={metric.title} value={metric.value} helper={metric.helper} icon={metric.icon} tone={metric.tone} />
           ))}
         </div>
       ) : null}
       {feeOverview ? (
-        <div className="grid gap-6 2xl:grid-cols-2">
+        <div className="grid gap-6 2xl:grid-cols-2" id="report-section-finance-charts">
           <ChartCard
             title="Collection rate by period"
             description="A quick visual read on how efficiently the organization is converting billed fees into collected revenue."
@@ -478,7 +1200,7 @@ export default function ReportsPage() {
           >
             <div className="space-y-5">
               {periodFinanceRows.map((item) => (
-                <div key={item.label} className="rounded-2xl border border-border/60 bg-muted/35 p-4">
+              <div key={item.label} className="rounded-2xl border border-border/60 bg-muted/35 p-4 shadow-sm">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-sm font-semibold">{item.label}</p>
@@ -492,15 +1214,15 @@ export default function ReportsPage() {
                     <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(item.rate, 100)}%` }} />
                   </div>
                   <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
-                    <div className="rounded-xl bg-white/80 p-3">
+                    <div className="rounded-2xl border border-border/60 bg-white/80 p-3 shadow-sm">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Pending</p>
                       <p className="mt-1 font-semibold text-amber-600">{formatCurrency(item.pending)}</p>
                     </div>
-                    <div className="rounded-xl bg-white/80 p-3">
+                    <div className="rounded-2xl border border-border/60 bg-white/80 p-3 shadow-sm">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Overdue</p>
                       <p className="mt-1 font-semibold text-rose-600">{formatCurrency(item.overdue)}</p>
                     </div>
-                    <div className="rounded-xl bg-white/80 p-3">
+                    <div className="rounded-2xl border border-border/60 bg-white/80 p-3 shadow-sm">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Collected</p>
                       <p className="mt-1 font-semibold text-emerald-600">{formatCurrency(item.collected)}</p>
                     </div>
@@ -512,8 +1234,8 @@ export default function ReportsPage() {
         </div>
       ) : null}
       {feeOverview ? (
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-5">
+        <div className="grid gap-4 lg:grid-cols-3" id="report-section-operations">
+          <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-5 shadow-sm">
             <p className="text-sm font-semibold text-sky-900">Pending collection action</p>
             <p className="mt-2 text-sm text-sky-800">
               {formatCurrency(feeOverview.currentMonth.pending)} is still open this month. Jump into fee records with the pending filter applied.
@@ -522,7 +1244,7 @@ export default function ReportsPage() {
               <Link href="/fees?status=PENDING">Open pending fees</Link>
             </Button>
           </div>
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
             <p className="text-sm font-semibold text-amber-900">Quarter follow-up queue</p>
             <p className="mt-2 text-sm text-amber-800">
               {formatCurrency(feeOverview.currentQuarter.pending)} remains pending this quarter. Use operations to follow up before it shifts into overdue exposure.
@@ -531,7 +1253,7 @@ export default function ReportsPage() {
               <Link href="/fees?status=PARTIAL">Open partial payments</Link>
             </Button>
           </div>
-          <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5 shadow-sm">
             <p className="text-sm font-semibold text-rose-900">Overdue recovery focus</p>
             <p className="mt-2 text-sm text-rose-800">
               {formatCurrency(feeOverview.currentMonth.overdue)} is already overdue this month. Route the team directly into the overdue fee list for recovery work.
@@ -543,7 +1265,7 @@ export default function ReportsPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-4">
+      <div className="grid gap-4 lg:grid-cols-4" id="report-section-operations-links">
         <Button variant="outline" asChild>
           <Link href="/fees?status=OVERDUE">Drill into overdue fees</Link>
         </Button>
@@ -557,7 +1279,7 @@ export default function ReportsPage() {
           <Link href="/attendance">Drill into attendance</Link>
         </Button>
       </div>
-      <div className="grid gap-6 2xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2" id="report-section-academics-charts-1">
         <ChartCard
           title="Collection performance by period"
           description="Current month, quarter, and year billed amounts split against collected, pending, and overdue fee positions."
@@ -634,7 +1356,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 2xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2" id="report-section-academics-charts-2">
         <ChartCard title="Academic operations radar" description="A broader shape of current academic activity instead of another linear chart.">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -725,7 +1447,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 2xl:grid-cols-3">
+      <div className="grid gap-6 2xl:grid-cols-3" id="report-section-reminders">
         <ChartCard title="Reminder channels">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -778,7 +1500,7 @@ export default function ReportsPage() {
           </div>
         </ChartCard>
       </div>
-      <div className="grid gap-6 2xl:grid-cols-2">
+      <div className="grid gap-6 2xl:grid-cols-2" id="report-section-activity">
         <ChartCard title="Fee status breakdown">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -968,7 +1690,7 @@ export default function ReportsPage() {
         </ChartCard>
       </div>
       {isSuperAdmin ? (
-        <div className="grid gap-6 2xl:grid-cols-2">
+        <div className="grid gap-6 2xl:grid-cols-2" id="report-section-tenancy">
           <ChartCard title="Organization growth" description="Tenant onboarding growth and linked student footprint over time.">
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -1021,4 +1743,34 @@ export default function ReportsPage() {
       ) : null}
     </div>
   );
+}
+
+function summarizeMetadata(log: ActivityLog) {
+  if (!log.metadata) {
+    return "No additional metadata";
+  }
+
+  const entries = Object.entries(log.metadata)
+    .filter(([, value]) => value !== null && value !== undefined)
+    .slice(0, 4)
+    .map(([key, value]) => {
+      if (Array.isArray(value)) {
+        return `${key}: ${value.join(", ")}`;
+      }
+
+      if (typeof value === "object") {
+        return `${key}: [object]`;
+      }
+
+      return `${key}: ${String(value)}`;
+    });
+
+  return entries.length > 0 ? entries.join(" | ") : "No additional metadata";
+}
+
+function formatShortDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }

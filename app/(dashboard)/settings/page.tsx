@@ -32,6 +32,7 @@ import {
 } from "@/features/reminders/schemas/reminder-automation-schema";
 import { normalizeApiError } from "@/lib/api/errors";
 import { useAuth } from "@/providers/auth-provider";
+import { getAiAccessLabel, hasAiAccess } from "@/lib/ai/access";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -67,7 +68,9 @@ export default function SettingsPage() {
       email: "",
       phone: "",
       address: "",
+      openAiApiKey: "",
       isActive: true,
+      aiDraftApprovalRequired: false,
     },
   });
 
@@ -106,7 +109,9 @@ export default function SettingsPage() {
       email: organizationQuery.data.email ?? "",
       phone: organizationQuery.data.phone ?? "",
       address: organizationQuery.data.address ?? "",
+      openAiApiKey: "",
       isActive: organizationQuery.data.isActive,
+      aiDraftApprovalRequired: organizationQuery.data.aiDraftApprovalRequired,
     });
   }, [organizationForm, organizationQuery.data]);
 
@@ -151,12 +156,17 @@ export default function SettingsPage() {
         email: values.email || undefined,
         phone: values.phone || undefined,
         address: values.address || undefined,
+        openAiApiKey: values.openAiApiKey || undefined,
       });
     },
     onSuccess: () => {
       toast.success("Organization settings updated");
       queryClient.invalidateQueries({ queryKey: ["organizations"] });
       queryClient.invalidateQueries({ queryKey: ["organizations", "settings", organizationId] });
+      queryClient.invalidateQueries({ queryKey: ["ai-current-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-queue-current-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["mail-current-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["reminders-current-settings"] });
     },
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
@@ -196,7 +206,7 @@ export default function SettingsPage() {
         <PageHeader
           eyebrow="Configuration"
           title="Settings"
-          description="Platform-level super admin sessions do not own a single tenant configuration. Use organizations to manage institution settings and profile to update your own account."
+          description="Platform-level super admin accounts do not own a single tenant configuration. Use organizations to manage institution settings and profile to update your own account."
         />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="Workspace Mode" value="Platform" helper="Global console without tenant-bound settings" icon={Settings2} tone="sky" />
@@ -210,14 +220,14 @@ export default function SettingsPage() {
             <CardDescription>Super admin operates across multiple institutions, so organization-owned settings are managed from tenant records rather than from a platform-wide form.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border bg-muted/30 p-5">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-5 shadow-sm">
               <p className="font-medium text-foreground">Manage institutions</p>
               <p className="mt-2 text-sm text-muted-foreground">Open the organizations workspace to review active tenants, update school identity details, and control which organizations remain active.</p>
               <Button asChild className="mt-4">
                 <Link href="/organizations">Go to organizations</Link>
               </Button>
             </div>
-            <div className="rounded-xl border bg-muted/30 p-5">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-5 shadow-sm">
               <p className="font-medium text-foreground">Manage personal account</p>
               <p className="mt-2 text-sm text-muted-foreground">Profile settings let you update your own name, email, and password without changing role assignments or tenant governance.</p>
               <Button asChild variant="outline" className="mt-4">
@@ -239,7 +249,7 @@ export default function SettingsPage() {
           description="Organization settings belong to the organization admin workspace."
         />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Workspace Mode" value="Tenant" helper="You are inside a tenant-scoped session" icon={Settings2} tone="sky" />
+          <MetricCard title="Workspace Mode" value="Tenant" helper="You are inside a tenant-scoped workspace" icon={Settings2} tone="sky" />
           <MetricCard title="Access Level" value="Restricted" helper="Only organization admins can update institution settings" icon={ShieldCheck} tone="amber" />
           <MetricCard title="Profile Access" value="Available" helper="You can still update your personal profile" icon={Building2} tone="emerald" />
           <MetricCard title="Reminder Config" value="Admin-only" helper="Provider and org settings are managed by tenant admins" icon={BellRing} tone="violet" />
@@ -311,11 +321,24 @@ export default function SettingsPage() {
           tone="sky"
         />
         <MetricCard
-          title="Reply Address"
-          value={providerSettings.replyToEmail ? "Configured" : "Pending"}
-          helper="Email response routing for reminders"
+          title="AI Key"
+          value={getAiAccessLabel(organizationQuery.data)}
+          helper={
+            hasAiAccess(organizationQuery.data)
+              ? organizationQuery.data.hasOpenAiApiKey
+                ? "Tenant-owned OpenAI credentials for AI workflows"
+                : "Trial AI uses a shared Groq key with a limited daily quota"
+              : "Add a tenant key or rely on the trial window to enable AI workflows"
+          }
           icon={Mail}
-          tone={providerSettings.replyToEmail ? "emerald" : "amber"}
+          tone={hasAiAccess(organizationQuery.data) ? "emerald" : "amber"}
+        />
+        <MetricCard
+          title="AI approval"
+          value={organizationQuery.data.aiDraftApprovalRequired ? "Required" : "Optional"}
+          helper="Whether generated drafts must be approved first"
+          icon={ShieldCheck}
+          tone={organizationQuery.data.aiDraftApprovalRequired ? "rose" : "sky"}
         />
       </div>
       <div className="grid gap-6 xl:grid-cols-2">
@@ -341,7 +364,32 @@ export default function SettingsPage() {
               <FormField label="Address" error={organizationForm.formState.errors.address} className="md:col-span-2">
                 <Textarea rows={4} {...organizationForm.register("address")} />
               </FormField>
-              <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground md:col-span-2">
+              <FormField label="OpenAI API key" error={organizationForm.formState.errors.openAiApiKey} className="md:col-span-2">
+                <Input
+                  type="password"
+                  autoComplete="off"
+                  placeholder={organizationQuery.data.hasOpenAiApiKey ? "Leave blank to keep the current key" : "sk-..."}
+                  {...organizationForm.register("openAiApiKey")}
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Stored securely for this organization only. Leave blank to keep the existing key. Trial organizations can use the shared Groq quota without a tenant key.
+                </p>
+              </FormField>
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm md:col-span-2">
+                <Checkbox
+                  checked={organizationForm.watch("aiDraftApprovalRequired")}
+                  onChange={() =>
+                    organizationForm.setValue("aiDraftApprovalRequired", !organizationForm.watch("aiDraftApprovalRequired"), {
+                      shouldDirty: true,
+                    })
+                  }
+                  label="Require approval for AI drafts"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  When enabled, generated notices, mail drafts, and reminder drafts stay in the review queue until approved.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm md:col-span-2">
                 <p className="font-medium text-foreground">Organization activation</p>
                 <p className="mt-2">
                   Tenant admins can update organization identity and contact settings here. Activation status remains a platform-level control managed by super admin.
@@ -422,7 +470,7 @@ export default function SettingsPage() {
               >
                 <FormField label="Provider" className="md:col-span-2">
                   <select
-                    className="h-10 rounded-xl border bg-background px-3 text-sm"
+                    className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm"
                     {...onlineClassProviderForm.register("provider")}
                   >
                     <option value="GOOGLE_MEET">Google Meet</option>
@@ -433,27 +481,21 @@ export default function SettingsPage() {
                   label="Integration enabled"
                   description="Allow scheduled online classes to use the selected provider."
                   checked={onlineClassProviderForm.watch("integrationEnabled")}
-                  onChange={(checked) =>
-                    onlineClassProviderForm.setValue("integrationEnabled", checked, { shouldDirty: true })
-                  }
+                  onChange={(checked) => onlineClassProviderForm.setValue("integrationEnabled", checked, { shouldDirty: true })}
                 />
                 <ToggleField
                   label="Auto-create meet links"
-                  description="Generate a Meet link as soon as an online class session is created."
+                  description="Generate a Meet link as soon as an online class occurrence is created."
                   checked={onlineClassProviderForm.watch("autoCreateMeetLinks")}
-                  onChange={(checked) =>
-                    onlineClassProviderForm.setValue("autoCreateMeetLinks", checked, { shouldDirty: true })
-                  }
+                  onChange={(checked) => onlineClassProviderForm.setValue("autoCreateMeetLinks", checked, { shouldDirty: true })}
                 />
                 <ToggleField
                   label="Auto-sync participants"
                   description="Reserved for scheduled background sync once the server job is enabled."
                   checked={onlineClassProviderForm.watch("autoSyncParticipants")}
-                  onChange={(checked) =>
-                    onlineClassProviderForm.setValue("autoSyncParticipants", checked, { shouldDirty: true })
-                  }
+                  onChange={(checked) => onlineClassProviderForm.setValue("autoSyncParticipants", checked, { shouldDirty: true })}
                 />
-                <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm">
                   <p className="font-medium text-foreground">Google Workspace requirement</p>
                   <p className="mt-1">
                     Calendar creation and participant sync require delegated Workspace credentials on the backend.
@@ -488,19 +530,19 @@ export default function SettingsPage() {
             <CardDescription>Explicit guidance for the settings that are live today and the ones that still need dedicated backend policy APIs.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm">
               <p className="font-medium text-foreground">Login governance</p>
               <p className="mt-2">Tenant users cannot sign in if the user is inactive or if the organization itself is marked inactive.</p>
             </div>
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm">
               <p className="font-medium text-foreground">Live today</p>
               <p className="mt-2">
                 Organization profile details, reminder provider controls, and online class provider settings are stored against the current tenant and affect real platform behavior.
               </p>
             </div>
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground shadow-sm">
               <p className="font-medium text-foreground">Next backend step</p>
-              <p className="mt-2">Session policy, password rotation policy, currency, and locale formats should move into a dedicated organization configuration model.</p>
+              <p className="mt-2">Access policy, password rotation policy, currency, and locale formats should move into a dedicated organization configuration model.</p>
             </div>
           </CardContent>
         </Card>
@@ -524,7 +566,7 @@ function ToggleField({
   className?: string;
 }) {
   return (
-    <label className={`flex items-start justify-between gap-4 rounded-xl border p-4 text-sm ${className ?? ""}`}>
+    <label className={`flex items-start justify-between gap-4 rounded-2xl border border-border/70 p-4 text-sm shadow-sm ${className ?? ""}`}>
       <div>
         <p className="font-medium">{label}</p>
         <p className="mt-1 text-muted-foreground">{description}</p>

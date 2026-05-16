@@ -53,13 +53,13 @@ export default function SecurityPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Security"
-        title="Sessions and login history"
-        description="Review active sessions, revoke old access, and monitor recent authentication activity for compliance and operational safety."
+        title="Login sessions and history"
+        description="Review active login sessions, revoke old access, and monitor recent authentication activity for compliance and operational safety."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Active sessions" value={String(activeSessions.length)} helper="Refresh-token backed device sessions" icon={Smartphone} tone="sky" />
-        <MetricCard title="Revoked sessions" value={String(revokedSessions.length)} helper="Sessions explicitly ended or rotated" icon={ShieldCheck} tone="violet" />
+        <MetricCard title="Active login sessions" value={String(activeSessions.length)} helper="Refresh-token backed device sessions" icon={Smartphone} tone="sky" />
+        <MetricCard title="Revoked login sessions" value={String(revokedSessions.length)} helper="Sessions explicitly ended or rotated" icon={ShieldCheck} tone="violet" />
         <MetricCard title="Failed logins" value={String(failedEvents)} helper="Recent invalid credential attempts" icon={ShieldX} tone={failedEvents > 0 ? "amber" : "emerald"} />
         <MetricCard title="Blocked attempts" value={String(blockedEvents)} helper="Rate-limited or policy-blocked auth" icon={Fingerprint} tone={blockedEvents > 0 ? "rose" : "emerald"} />
       </div>
@@ -67,13 +67,13 @@ export default function SecurityPage() {
       <div className="grid gap-6 xl:grid-cols-[1.15fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Current sessions</CardTitle>
-            <CardDescription>Each session represents an active or historical refresh session tied to this account.</CardDescription>
+            <CardTitle>Current login sessions</CardTitle>
+            <CardDescription>Each item represents an active or historical refresh session tied to this account.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {sessions.length ? (
               sessions.map((session) => (
-                <div key={session.id} className="rounded-2xl border p-4">
+                <div key={session.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -104,7 +104,7 @@ export default function SecurityPage() {
                 </div>
               ))
             ) : (
-              <EmptyState title="No session history" description="Active and historical refresh sessions will appear here after account use." />
+              <EmptyState title="No login history" description="Active and historical refresh sessions will appear here after account use." />
             )}
           </CardContent>
         </Card>
@@ -118,7 +118,7 @@ export default function SecurityPage() {
             <p>Review active sessions regularly and revoke sessions you do not recognize.</p>
             <p>Blocked or repeated failed attempts usually indicate incorrect credentials or misuse that should be investigated.</p>
             <p>If your role or organization access changes, re-login so the latest permissions and module access apply cleanly.</p>
-            <div className="rounded-2xl border bg-muted/30 p-4">
+            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
               <p className="font-medium text-foreground">Compliance note</p>
               <p className="mt-2">This page is intended for account-level session review. Platform-wide audit remains in Activity Logs and super-admin governance modules.</p>
             </div>
@@ -134,7 +134,7 @@ export default function SecurityPage() {
         <CardContent className="space-y-3">
           {recentLoginEvents.length ? (
             recentLoginEvents.map((event) => (
-              <div key={event.id} className="rounded-2xl border p-4">
+              <div key={event.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">

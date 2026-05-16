@@ -2,7 +2,7 @@ import { apiClient, unwrapResponse } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import { buildQueryParams } from "@/lib/api/query-utils";
 import type { ApiResponse, PaginatedResult, PaginationParams } from "@/types/api";
-import type { CreateAssessmentDto, ReviewAssessmentAttemptDto, UpdateAssessmentDto } from "@/types/dto";
+import type { BulkDeleteDto, CreateAssessmentDto, ReviewAssessmentAttemptDto, UpdateAssessmentDto } from "@/types/dto";
 import type { Assessment, AssessmentAnalytics, AssessmentReviewAttempt, AssessmentReviewQueue } from "@/types/domain";
 
 export const assessmentsApi = {
@@ -23,4 +23,10 @@ export const assessmentsApi = {
     unwrapResponse(apiClient.patch<ApiResponse<AssessmentReviewAttempt>>(endpoints.assessments.reviewAttempt(attemptId), payload)),
   remove: (id: string) =>
     unwrapResponse(apiClient.delete<ApiResponse<{ deleted: boolean }>>(endpoints.assessments.detail(id))),
+  bulkRemove: (ids: string[]) =>
+    unwrapResponse(
+      apiClient.post<ApiResponse<{ deletedCount: number }>>(endpoints.assessments.bulkDelete, { ids } satisfies BulkDeleteDto),
+    ),
+  bulkUpdateStatus: (ids: string[], status: "DRAFT" | "PUBLISHED" | "CLOSED") =>
+    unwrapResponse(apiClient.post<ApiResponse<{ updatedCount: number }>>(endpoints.assessments.bulkStatus, { ids, status })),
 };

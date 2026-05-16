@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { BarChart3, BookCopy, Clock3, FileQuestion, FileUp, LibraryBig, ListChecks, MessageSquareText, Sparkles } from "lucide-react";
 import { useFieldArray, useForm, useWatch, type Control, type FieldErrors, type UseFormRegister } from "react-hook-form";
 import { toast } from "sonner";
@@ -41,10 +42,13 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useSavedFilterPresets } from "@/hooks/use-saved-filter-presets";
 import { usePermission } from "@/hooks/use-permission";
 import { normalizeApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/formatters";
+import { exportRowsToCsv } from "@/lib/utils/export";
 import type { Assessment } from "@/types/domain";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const QUESTION_TYPE_OPTIONS = [
   { value: "MCQ", label: "MCQ" },
@@ -168,12 +172,12 @@ function QuestionEditor({ control, register, errors, index, onRemove, onSaveToBa
           {optionsFieldArray.fields.map((field, optionIndex) => {
             const optionError = questionError?.options?.[optionIndex];
             return (
-              <div key={field.id} className="grid gap-3 rounded-xl border border-dashed p-3 md:grid-cols-[1fr_auto_auto]">
+              <div key={field.id} className="grid gap-3 rounded-2xl border border-dashed border-border/70 bg-muted/20 p-3 shadow-sm md:grid-cols-[1fr_auto_auto]">
                 <FormField label={`Option ${optionIndex + 1}`} error={optionError?.text}>
                   <Input {...register(`questions.${index}.options.${optionIndex}.text`)} />
                 </FormField>
                 <div className="flex items-end">
-                  <label className="flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
+                  <label className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/70 px-3 py-2 text-sm shadow-sm">
                     <Checkbox {...register(`questions.${index}.options.${optionIndex}.isCorrect`)} />
                     Correct
                   </label>
@@ -225,7 +229,9 @@ function QuestionEditor({ control, register, errors, index, onRemove, onSaveToBa
 export default function AssessmentsPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [selectedPresetId, setSelectedPresetId] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [open, setOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
@@ -239,6 +245,19 @@ export default function AssessmentsPage() {
   const debouncedSearch = useDebouncedValue(search);
   const canCreate = usePermission("assessments.create");
   const canManage = usePermission("assessments.update");
+  const savedAssessmentFilterPresets = useSavedFilterPresets<{
+    search: string;
+  }>("assessments-filter-presets");
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
 
   const assessmentsQuery = useQuery({
     queryKey: ["assessments", debouncedSearch, pageIndex],
@@ -361,6 +380,27 @@ export default function AssessmentsPage() {
       writeAssessmentDraft(null);
       setHasStoredDraft(false);
       setDraftSavedAt(null);
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => assessmentsApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected assessments deleted");
+      queryClient.invalidateQueries({ queryKey: ["assessments"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: async (payload: { ids: string[]; status: "DRAFT" | "PUBLISHED" | "CLOSED" }) =>
+      assessmentsApi.bulkUpdateStatus(payload.ids, payload.status),
+    onSuccess: (_, variables) => {
+      toast.success(variables.status === "PUBLISHED" ? "Selected assessments published" : "Selected assessments moved to draft");
+      queryClient.invalidateQueries({ queryKey: ["assessments"] });
+      setRowSelection({});
     },
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
@@ -493,6 +533,26 @@ export default function AssessmentsPage() {
       totalQuestions: assessments.reduce((sum, assessment) => sum + assessment.questionCount, 0),
     }),
     [assessments],
+  );
+  const selectedAssessmentIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedAssessmentExportRows = useMemo(
+    () =>
+      assessments
+        .filter((assessment) => selectedAssessmentIds.includes(assessment.id))
+        .map((assessment) => ({
+          Assessment: assessment.title,
+          Code: assessment.code,
+          Batch: assessment.batchName,
+          Subject: assessment.subjectName,
+          Type: assessment.type.replaceAll("_", " "),
+          Questions: assessment.questionCount,
+          Duration: `${assessment.durationMinutes} min`,
+          Status: assessment.status,
+          Created: formatDate(assessment.createdAt),
+        })),
+    [assessments, selectedAssessmentIds],
   );
 
   const analytics = useMemo(() => {
@@ -666,6 +726,119 @@ export default function AssessmentsPage() {
         <MetricCard title="Immediate results" value={String(stats.objectiveReady)} helper="Configured to reveal results instantly" icon={ListChecks} tone="amber" />
         <MetricCard title="Question bank" value={String(stats.totalQuestions)} helper="Questions across visible assessments" icon={Clock3} tone="violet" />
       </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ module: "assessments" })}>Audit assessment events</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-status" })}>Audit bulk status</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Audit bulk deletes</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "create" })}>Audit assessment creation</Link>
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 px-4 py-3 text-sm shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Saved views</span>
+          <Select
+            value={selectedPresetId}
+            onValueChange={(presetId) => {
+              const preset = savedAssessmentFilterPresets.presets.find((item) => item.id === presetId);
+              if (!preset) return;
+              setSearch(preset.value.search);
+              setSelectedPresetId(preset.id);
+              setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select saved view" />
+            </SelectTrigger>
+            <SelectContent>
+              {savedAssessmentFilterPresets.presets.length === 0 ? (
+                <SelectItem value="__none" disabled>
+                  No saved views yet
+                </SelectItem>
+              ) : (
+                savedAssessmentFilterPresets.presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const name = window.prompt("Save the current assessment search as:");
+              const preset = name ? savedAssessmentFilterPresets.savePreset(name, { search }) : null;
+              if (preset) {
+                setSelectedPresetId(preset.id);
+                toast.success(`Saved view "${preset.name}"`);
+              }
+            }}
+          >
+            Save current view
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              savedAssessmentFilterPresets.clearPresets();
+              setSelectedPresetId("");
+              toast.success("Saved assessment views cleared");
+            }}
+            disabled={savedAssessmentFilterPresets.presets.length === 0}
+          >
+            Clear saved views
+          </Button>
+        </div>
+      </div>
+
+      {selectedAssessmentIds.length > 0 && canManage ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedAssessmentIds.length} assessment{selectedAssessmentIds.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "assessments-selected", rows: selectedAssessmentExportRows })}
+              disabled={selectedAssessmentExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => bulkStatusMutation.mutate({ ids: selectedAssessmentIds, status: "PUBLISHED" })}
+              disabled={bulkStatusMutation.isPending || bulkDeleteMutation.isPending}
+            >
+              Publish selected
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => bulkStatusMutation.mutate({ ids: selectedAssessmentIds, status: "DRAFT" })}
+              disabled={bulkStatusMutation.isPending || bulkDeleteMutation.isPending}
+            >
+              Move to draft
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => bulkDeleteMutation.mutate(selectedAssessmentIds)}
+              disabled={bulkDeleteMutation.isPending || bulkStatusMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <FilterBar
         search={search}
@@ -765,9 +938,9 @@ export default function AssessmentsPage() {
                         ))}
                       </NativeSelect>
                     </FormField>
-                    <FormField label="Academic session" error={form.formState.errors.academicSessionId}>
+                    <FormField label="Academic year / term" error={form.formState.errors.academicSessionId}>
                       <NativeSelect {...form.register("academicSessionId")}>
-                        <option value="">No session</option>
+                        <option value="">No period</option>
                         {sessionsQuery.data?.items.map((session) => (
                           <option key={session.id} value={session.id}>
                             {session.name}
@@ -836,7 +1009,7 @@ export default function AssessmentsPage() {
                       <div className="mt-3 space-y-2">
                         {questionBank.length ? (
                           questionBank.slice(0, 4).map((entry) => (
-                            <div key={entry.id} className="rounded-xl border p-3">
+                            <div key={entry.id} className="rounded-2xl border border-border/70 bg-background/70 p-3 shadow-sm">
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <p className="font-medium">{entry.title}</p>
@@ -991,6 +1164,9 @@ export default function AssessmentsPage() {
         pageCount={Math.max(1, Math.ceil(assessmentsQuery.data.total / 10))}
         pagination={{ pageIndex, pageSize: 10 }}
         onPaginationChange={(state) => setPageIndex(state.pageIndex)}
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
 
       {selectedAssessment ? (
@@ -1030,21 +1206,21 @@ export default function AssessmentsPage() {
             })}
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border p-3">
+            <div className="rounded-2xl border border-border/70 bg-background/70 p-3 shadow-sm">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Duration</p>
               <p className="mt-1 font-medium">{selectedAssessment.durationMinutes} minutes</p>
             </div>
-            <div className="rounded-xl border p-3">
+            <div className="rounded-2xl border border-border/70 bg-background/70 p-3 shadow-sm">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Marks</p>
               <p className="mt-1 font-medium">
                 {selectedAssessment.totalMarks} total / {selectedAssessment.passMarks} pass
               </p>
             </div>
-            <div className="rounded-xl border p-3">
+            <div className="rounded-2xl border border-border/70 bg-background/70 p-3 shadow-sm">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Window</p>
               <p className="mt-1 font-medium">{selectedAssessment.startsAt ? formatDate(selectedAssessment.startsAt) : "Not scheduled"}</p>
             </div>
-            <div className="rounded-xl border p-3">
+            <div className="rounded-2xl border border-border/70 bg-background/70 p-3 shadow-sm">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Result mode</p>
               <p className="mt-1 font-medium">{selectedAssessment.showResultImmediately ? "Immediate objective result" : "Manual release"}</p>
             </div>
@@ -1052,7 +1228,7 @@ export default function AssessmentsPage() {
           {detailView === "overview" ? (
             <div className="mt-5 space-y-3">
               {selectedAssessment.questions.map((question, index) => (
-                <div key={question.id} className="rounded-xl border border-dashed p-4">
+                <div key={question.id} className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4 shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-medium">
                       Q{index + 1}. {question.prompt}
@@ -1081,22 +1257,22 @@ export default function AssessmentsPage() {
           {detailView === "grading" && selectedAssessmentInsights ? (
             <div className="mt-5 space-y-4">
               <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Manual review queue</p>
                   <p className="mt-1 text-2xl font-semibold">{reviewQueueQuery.data?.reviewPendingAttempts ?? selectedAssessmentInsights.subjectiveQuestions.length}</p>
                 </div>
-                <div className="rounded-xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Rubrics prepared</p>
                   <p className="mt-1 text-2xl font-semibold">{selectedAssessmentInsights.gradingTemplatesReady}</p>
                 </div>
-                <div className="rounded-xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Estimated review time</p>
                   <p className="mt-1 text-2xl font-semibold">{(reviewQueueQuery.data?.reviewPendingAttempts ?? selectedAssessmentInsights.subjectiveQuestions.length) * 4} min</p>
                 </div>
               </div>
               {reviewQueueQuery.data?.attempts.length ? (
                 <>
-                  <div className="rounded-xl border p-4">
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                     <FormField label="Attempt under review">
                       <NativeSelect
                         value={selectedReviewAttemptId ?? ""}
@@ -1112,7 +1288,7 @@ export default function AssessmentsPage() {
                     </FormField>
                   </div>
                   {(selectedReviewAttempt?.answers.filter((answer) => ["SHORT_ANSWER", "LONG_ANSWER"].includes(answer.type)) ?? []).map((answer, index) => (
-                  <div key={answer.id} className="rounded-xl border border-dashed p-4">
+                  <div key={answer.id} className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="font-medium">Review {index + 1}. {answer.prompt}</p>
@@ -1122,7 +1298,7 @@ export default function AssessmentsPage() {
                       </div>
                       <Badge variant="outline">{gradingWorkspace[answer.questionId]?.reviewPriority ?? "MEDIUM"} priority</Badge>
                     </div>
-                    <div className="mt-3 rounded-xl border bg-muted/20 px-4 py-3 text-sm">
+                    <div className="mt-3 rounded-2xl border border-border/70 bg-muted/20 px-4 py-3 text-sm shadow-sm">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Submitted answer</p>
                       <p className="mt-1 whitespace-pre-wrap">{answer.answerText ?? answer.selectedOptionText ?? "No answer submitted"}</p>
                     </div>
@@ -1184,7 +1360,7 @@ export default function AssessmentsPage() {
                   ) : null}
                 </>
               ) : (
-                <div className="rounded-xl border p-4 text-sm text-muted-foreground">
+                <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground shadow-sm">
                   No graded attempts are available yet for this assessment.
                 </div>
               )}
@@ -1204,30 +1380,30 @@ export default function AssessmentsPage() {
           {detailView === "analytics" && selectedAssessmentInsights ? (
             <div className="mt-5 space-y-4">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Average score</p>
                   <p className="mt-1 text-2xl font-semibold">{analyticsQuery.data?.averageScore ?? 0}</p>
                 </div>
-                <div className="rounded-xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Average percentage</p>
                   <p className="mt-1 text-2xl font-semibold">{analyticsQuery.data?.averagePercentage ?? 0}%</p>
                 </div>
-                <div className="rounded-xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Pass rate</p>
                   <p className="mt-1 text-2xl font-semibold">{analyticsQuery.data?.passRate ?? 0}%</p>
                 </div>
-                <div className="rounded-xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Completed attempts</p>
                   <p className="mt-1 text-2xl font-semibold">{analyticsQuery.data?.completedAttempts ?? 0}</p>
                 </div>
               </div>
               <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="font-medium">Question performance</p>
                   <div className="mt-4 space-y-3">
                     {(analyticsQuery.data?.questionBreakdown ?? []).map((question) => {
                       return (
-                        <div key={question.questionId} className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm">
+                        <div key={question.questionId} className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 px-3 py-2 text-sm shadow-sm">
                           <div>
                             <p className="font-medium">{question.prompt}</p>
                             <p className="text-xs text-muted-foreground">
@@ -1240,22 +1416,22 @@ export default function AssessmentsPage() {
                     })}
                   </div>
                 </div>
-                <div className="rounded-xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="font-medium">Assessment composition</p>
                   <div className="mt-4 space-y-3 text-sm">
-                    <div className="flex items-center justify-between rounded-xl border px-3 py-2">
+                    <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-3 py-2 shadow-sm">
                       <span>Objective coverage</span>
                       <Badge variant="outline">{selectedAssessmentInsights.objectiveCoverage}%</Badge>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border px-3 py-2">
+                    <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-3 py-2 shadow-sm">
                       <span>Subjective coverage</span>
                       <Badge variant="outline">{selectedAssessmentInsights.subjectiveCoverage}%</Badge>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border px-3 py-2">
+                    <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-3 py-2 shadow-sm">
                       <span>Top score</span>
                       <Badge variant="outline">{analyticsQuery.data?.topScore ?? "-"}</Badge>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border px-3 py-2">
+                    <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-3 py-2 shadow-sm">
                       <span>Lowest score</span>
                       <Badge variant="outline">{analyticsQuery.data?.lowestScore ?? "-"}</Badge>
                     </div>
@@ -1277,7 +1453,7 @@ export default function AssessmentsPage() {
               <div className="grid gap-4 xl:grid-cols-2">
                 {questionBank.length ? (
                   questionBank.map((entry) => (
-                    <div key={entry.id} className="rounded-xl border p-4">
+                    <div key={entry.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-medium">{entry.title}</p>
@@ -1292,7 +1468,7 @@ export default function AssessmentsPage() {
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-xl border p-4 text-sm text-muted-foreground">
+                  <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground shadow-sm">
                     Save questions from the assessment builder to create a reusable question bank.
                   </div>
                 )}

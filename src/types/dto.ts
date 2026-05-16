@@ -23,6 +23,10 @@ import type {
   ClassDeliveryMode,
   OnlineClassProvider,
   OnlineClassSessionStatus,
+  MailRecipientType,
+  AiPromptPreset,
+  NoticeCampaignAudience,
+  AiReviewItem,
 } from "@/types/domain";
 
 export interface LoginDto {
@@ -57,6 +61,25 @@ export interface LogoutDto {
   reason?: string;
 }
 
+export interface BulkDeleteDto {
+  ids: string[];
+}
+
+export interface BulkUpdateAttendanceStatusDto {
+  ids: string[];
+  status: AttendanceStatus;
+}
+
+export interface BulkCreateAttendanceDto {
+  items: Array<{
+    studentId: string;
+    batchId: string;
+    attendanceDate: string;
+    status: AttendanceStatus;
+    remarks?: string;
+  }>;
+}
+
 export interface CreateUserDto {
   firstName: string;
   lastName: string;
@@ -83,8 +106,10 @@ export interface CreateOrganizationDto {
   subscriptionStartsAt?: string;
   subscriptionEndsAt?: string;
   subscriptionNotes?: string;
+  aiDraftApprovalRequired?: boolean;
   userLimit?: number;
   studentLimit?: number;
+  openAiApiKey?: string;
   enabledModules?: OrganizationModule[];
 }
 
@@ -103,6 +128,8 @@ export interface CreateOrganizationBillingEntryDto {
   periodEnd?: string;
 }
 
+export interface UpdateOrganizationBillingEntryDto extends Partial<CreateOrganizationBillingEntryDto> {}
+
 export interface CreateContactInquiryDto {
   fullName: string;
   email: string;
@@ -113,6 +140,94 @@ export interface CreateContactInquiryDto {
   requestedModules: string[];
   inquiryType?: string;
   message: string;
+}
+
+export interface GenerateNoticeAiDto {
+  audience: string;
+  topic: string;
+  tone: string;
+  purpose: string;
+  callToAction?: string;
+  keyPoints?: string[];
+  audienceContext?: string;
+  promptPreset?: AiPromptPreset;
+  organizationId?: string;
+}
+
+export interface GenerateMailDraftAiDto {
+  recipientName: string;
+  recipientRole: string;
+  threadContext: string;
+  tone: string;
+  subjectHint?: string;
+  additionalInstructions?: string;
+  promptPreset?: AiPromptPreset;
+  organizationId?: string;
+}
+
+export interface GenerateSupportReplyAiDto {
+  question: string;
+  conversationSummary?: string;
+  contextBullets?: string[];
+  tone?: string;
+  promptPreset?: AiPromptPreset;
+  organizationId?: string;
+}
+
+export interface ExtractAdmissionFormAiDto {
+  rawText: string;
+  sourceLabel?: string;
+  promptPreset?: AiPromptPreset;
+  organizationId?: string;
+}
+
+export interface GenerateStudentRiskRecommendationAiDto {
+  studentName: string;
+  context: string;
+  tone?: string;
+  promptPreset?: AiPromptPreset;
+  organizationId?: string;
+}
+
+export interface GenerateFeeCollectionPlanAiDto {
+  studentName: string;
+  context: string;
+  tone?: string;
+  promptPreset?: AiPromptPreset;
+  organizationId?: string;
+}
+
+export interface GenerateAttendanceInterventionAiDto {
+  studentName?: string;
+  context: string;
+  tone?: string;
+  promptPreset?: AiPromptPreset;
+  organizationId?: string;
+}
+
+export interface GenerateReminderDraftAiDto {
+  audience: string;
+  context: string;
+  tone?: string;
+  promptPreset?: AiPromptPreset;
+  organizationId?: string;
+}
+
+export interface ScheduleNoticeCampaignAiDto {
+  title: string;
+  body: string;
+  category?: string;
+  audience: NoticeCampaignAudience;
+  isPinned?: boolean;
+  publishedAt?: string;
+  expiresAt?: string;
+  targetScope?: string;
+  promptPreset?: AiPromptPreset;
+  organizationId?: string;
+}
+
+export interface SaveAiReviewQueueDto {
+  items: AiReviewItem[];
 }
 
 export interface UpdateContactInquiryStatusDto {
@@ -489,4 +604,25 @@ export interface UpsertReminderProviderSettingDto {
   paymentConfirmationEnabled?: boolean;
   senderName?: string;
   replyToEmail?: string;
+}
+
+export interface MailRecipientDto {
+  email: string;
+  name?: string;
+  recipientType?: MailRecipientType;
+}
+
+export interface CreateMailMessageDto {
+  subject: string;
+  body: string;
+  recipients: MailRecipientDto[];
+  sendNow?: boolean;
+  conversationId?: string;
+}
+
+export interface UpdateMailDraftDto extends Partial<CreateMailMessageDto> {}
+
+export interface ReplyMailMessageDto {
+  body: string;
+  recipients?: MailRecipientDto[];
 }

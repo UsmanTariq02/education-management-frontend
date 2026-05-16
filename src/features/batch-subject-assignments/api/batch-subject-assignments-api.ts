@@ -2,7 +2,7 @@ import { apiClient, unwrapResponse } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import { buildQueryParams } from "@/lib/api/query-utils";
 import type { ApiResponse, PaginatedResult, PaginationParams } from "@/types/api";
-import type { CreateBatchSubjectAssignmentDto, UpdateBatchSubjectAssignmentDto } from "@/types/dto";
+import type { BulkDeleteDto, CreateBatchSubjectAssignmentDto, UpdateBatchSubjectAssignmentDto } from "@/types/dto";
 import type { BatchSubjectAssignment } from "@/types/domain";
 
 export const batchSubjectAssignmentsApi = {
@@ -20,4 +20,12 @@ export const batchSubjectAssignmentsApi = {
     unwrapResponse(apiClient.patch<ApiResponse<BatchSubjectAssignment>>(endpoints.batchSubjectAssignments.detail(id), payload)),
   remove: (id: string) =>
     unwrapResponse(apiClient.delete<ApiResponse<{ deleted: boolean }>>(endpoints.batchSubjectAssignments.detail(id))),
+  bulkRemove: (ids: string[]) =>
+    unwrapResponse(
+      apiClient.post<ApiResponse<{ deletedCount: number }>>(endpoints.batchSubjectAssignments.bulkDelete, { ids } satisfies BulkDeleteDto),
+    ),
+  bulkUpdateStatus: (ids: string[], isActive: boolean) =>
+    unwrapResponse(
+      apiClient.post<ApiResponse<{ updatedCount: number }>>(endpoints.batchSubjectAssignments.bulkStatus, { ids, isActive }),
+    ),
 };

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Link2, School, UserRoundCheck, Waypoints } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { batchesApi } from "@/features/batches/api/batches-api";
@@ -33,6 +33,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePermission } from "@/hooks/use-permission";
 import { normalizeApiError } from "@/lib/api/errors";
+import { exportRowsToCsv } from "@/lib/utils/export";
 import { useAuth } from "@/providers/auth-provider";
 import type { BatchSubjectAssignment } from "@/types/domain";
 
@@ -42,11 +43,13 @@ export default function BatchSubjectAssignmentsPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<BatchSubjectAssignment | null>(null);
   const [selectedItem, setSelectedItem] = useState<BatchSubjectAssignment | null>(null);
   const canCreate = usePermission("batch-subject-assignments.create");
   const canManage = usePermission("batch-subject-assignments.update");
+  const canDelete = usePermission("batch-subject-assignments.delete");
 
   const query = useQuery({
     queryKey: ["batch-subject-assignments", debouncedSearch, pageIndex],
@@ -92,6 +95,27 @@ export default function BatchSubjectAssignmentsPage() {
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => batchSubjectAssignmentsApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected assignments deleted");
+      queryClient.invalidateQueries({ queryKey: ["batch-subject-assignments"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: async (payload: { ids: string[]; isActive: boolean }) =>
+      batchSubjectAssignmentsApi.bulkUpdateStatus(payload.ids, payload.isActive),
+    onSuccess: (_, variables) => {
+      toast.success(variables.isActive ? "Selected assignments activated" : "Selected assignments deactivated");
+      queryClient.invalidateQueries({ queryKey: ["batch-subject-assignments"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
   const items = query.data?.items ?? [];
   const stats = useMemo(
     () => ({
@@ -101,6 +125,26 @@ export default function BatchSubjectAssignmentsPage() {
       active: items.filter((item) => item.isActive).length,
     }),
     [items],
+  );
+  const selectedAssignmentIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedAssignmentExportRows = useMemo(
+    () =>
+      items
+        .filter((assignment) => selectedAssignmentIds.includes(assignment.id))
+        .map((assignment) => ({
+          Batch: assignment.batchName,
+          BatchCode: assignment.batchCode,
+          Subject: assignment.subjectName,
+          SubjectCode: assignment.subjectCode,
+          Teacher: assignment.teacherName ?? "Unassigned",
+          Period: assignment.academicSessionName ?? "General",
+          WeeklyClasses: assignment.weeklyClasses,
+          Primary: assignment.isPrimary ? "Yes" : "No",
+          Status: assignment.isActive ? "Active" : "Inactive",
+        })),
+    [items, selectedAssignmentIds],
   );
 
   const columns = useMemo<Array<ColumnDef<BatchSubjectAssignment>>>(
@@ -132,7 +176,7 @@ export default function BatchSubjectAssignmentsPage() {
       },
       {
         accessorKey: "academicSessionName",
-        header: "Session",
+        header: "Period",
         cell: ({ row }) => row.original.academicSessionName ?? <span className="text-muted-foreground">General</span>,
       },
       {
@@ -213,7 +257,7 @@ export default function BatchSubjectAssignmentsPage() {
           setSearch(value);
           setPageIndex(0);
         }}
-        searchPlaceholder="Search by batch, subject, teacher, or session..."
+        searchPlaceholder="Search by batch, subject, teacher, or period..."
         action={
           canCreate || canManage ? (
             <Dialog open={open} onOpenChange={setOpen}>
@@ -228,9 +272,9 @@ export default function BatchSubjectAssignmentsPage() {
                   <DialogDescription>Use assignments to define which subjects a batch studies and who owns them academically.</DialogDescription>
                 </DialogHeader>
                 <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-                  <FormField label="Academic session" className="md:col-span-2">
+                  <FormField label="Academic year / term" className="md:col-span-2">
                     <NativeSelect {...form.register("academicSessionId")}>
-                      <option value="">General / all sessions</option>
+                      <option value="">General / all periods</option>
                       {sessionsQuery.data?.items.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.name}
@@ -269,7 +313,7 @@ export default function BatchSubjectAssignmentsPage() {
                     </NativeSelect>
                   </FormField>
                   <FormField label="Weekly classes" required error={form.formState.errors.weeklyClasses}>
-                    <input className="h-10 rounded-xl border bg-background px-3 text-sm" type="number" min={1} {...form.register("weeklyClasses")} />
+                    <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" type="number" min={1} {...form.register("weeklyClasses")} />
                   </FormField>
                   <Checkbox {...form.register("isPrimary")} label="Mark as primary subject" />
                   <Checkbox {...form.register("isActive")} label="Keep assignment active" />
@@ -287,12 +331,61 @@ export default function BatchSubjectAssignmentsPage() {
           ) : null
         }
       />
+      {selectedAssignmentIds.length > 0 && (canManage || canDelete) ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedAssignmentIds.length} assignment{selectedAssignmentIds.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "batch-subject-assignments-selected", rows: selectedAssignmentExportRows })}
+              disabled={selectedAssignmentExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            {canManage ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => bulkStatusMutation.mutate({ ids: selectedAssignmentIds, isActive: true })}
+                  disabled={bulkStatusMutation.isPending || bulkDeleteMutation.isPending}
+                >
+                  Activate selected
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => bulkStatusMutation.mutate({ ids: selectedAssignmentIds, isActive: false })}
+                  disabled={bulkStatusMutation.isPending || bulkDeleteMutation.isPending}
+                >
+                  Deactivate selected
+                </Button>
+              </>
+            ) : null}
+            {canDelete ? (
+              <Button
+                variant="destructive"
+                onClick={() => bulkDeleteMutation.mutate(selectedAssignmentIds)}
+                disabled={bulkDeleteMutation.isPending || bulkStatusMutation.isPending}
+              >
+                {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <DataTable
         data={items}
         columns={columns}
         pageCount={Math.ceil(query.data.total / query.data.limit)}
         pagination={{ pageIndex, pageSize: query.data.limit }}
         onPaginationChange={(state) => setPageIndex(state.pageIndex)}
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
       <Dialog open={Boolean(selectedItem)} onOpenChange={(nextOpen) => !nextOpen && setSelectedItem(null)}>
         <DialogContent>

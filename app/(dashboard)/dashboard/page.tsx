@@ -8,11 +8,15 @@ import { reportsApi } from "@/features/reports/api/reports-api";
 import { activityLogsApi } from "@/features/activity-logs/api/activity-logs-api";
 import { onlineClassesApi } from "@/features/online-classes/api/online-classes-api";
 import { organizationsApi } from "@/features/organizations/api/organizations-api";
+import { usersApi } from "@/features/users/api/users-api";
+import { batchesApi } from "@/features/batches/api/batches-api";
+import { academicSessionsApi } from "@/features/academic-sessions/api/academic-sessions-api";
 import { teachersApi } from "@/features/teachers/api/teachers-api";
 import { timetablesApi } from "@/features/timetables/api/timetables-api";
 import { batchSubjectAssignmentsApi } from "@/features/batch-subject-assignments/api/batch-subject-assignments-api";
 import { examsApi } from "@/features/exams/api/exams-api";
 import { examResultsApi } from "@/features/exam-results/api/exam-results-api";
+import { feesApi } from "@/features/fees/api/fees-api";
 import { usePermission } from "@/hooks/use-permission";
 import { useAuth } from "@/providers/auth-provider";
 import { metricCardData } from "@/lib/utils/dashboard";
@@ -29,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { getChartColor } from "@/lib/constants/chart-colors";
 import { Skeleton } from "@/components/ui/skeleton";
+import { hasModule } from "@/lib/permissions/access";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -37,13 +42,24 @@ export default function DashboardPage() {
   const canReadActivityLogs = usePermission("activity-logs.read");
   const canReadOnlineClasses = usePermission("online-classes.read");
   const canReadTeachers = usePermission("teachers.read");
+  const canReadUsers = usePermission("users.read");
+  const canReadStudents = usePermission("students.read");
+  const canReadBatches = usePermission("batches.read");
+  const canReadAcademicSessions = usePermission("academic-sessions.read");
+  const canReadFeePlans = usePermission("fees.read");
   const canReadTimetables = usePermission("timetables.read");
   const canReadAssignments = usePermission("batch-subject-assignments.read");
   const canReadExams = usePermission("exams.read");
   const canReadExamResults = usePermission("exam-results.read");
   const isTeacherWorkspace = isTeacher && !isSuperAdmin;
+  const canViewTenantSettings = Boolean(user?.roles.includes("ADMIN")) && hasModule(user, "SETTINGS");
   const summaryQuery = useQuery({ queryKey: ["reports", "summary"], queryFn: reportsApi.summary, enabled: !isTeacherWorkspace });
   const shouldLoadSecondaryCharts = !isTeacherWorkspace && Boolean(summaryQuery.data);
+  const currentSettingsQuery = useQuery({
+    queryKey: ["organization-settings", "dashboard-banner"],
+    queryFn: organizationsApi.currentSettings,
+    enabled: !isTeacherWorkspace && canViewTenantSettings,
+  });
   const feeCollectionOverviewQuery = useQuery({
     queryKey: ["reports", "fees", "collection-overview", "dashboard"],
     queryFn: reportsApi.feeCollectionOverview,
@@ -73,6 +89,31 @@ export default function DashboardPage() {
     queryKey: ["reports", "fees", "status-breakdown"],
     queryFn: reportsApi.feeStatusBreakdown,
     enabled: shouldLoadSecondaryCharts,
+  });
+  const academicSummaryQuery = useQuery({
+    queryKey: ["reports", "academics", "summary", "dashboard"],
+    queryFn: reportsApi.academicSummary,
+    enabled: isSuperAdmin && shouldLoadSecondaryCharts,
+  });
+  const userRoleDistributionQuery = useQuery({
+    queryKey: ["reports", "users", "role-distribution", "dashboard"],
+    queryFn: reportsApi.userRoleDistribution,
+    enabled: isSuperAdmin && shouldLoadSecondaryCharts,
+  });
+  const userStatusSummaryQuery = useQuery({
+    queryKey: ["reports", "users", "status-summary", "dashboard"],
+    queryFn: reportsApi.userStatusSummary,
+    enabled: isSuperAdmin && shouldLoadSecondaryCharts,
+  });
+  const batchStatusSummaryQuery = useQuery({
+    queryKey: ["reports", "batches", "status-summary", "dashboard"],
+    queryFn: reportsApi.batchStatusSummary,
+    enabled: isSuperAdmin && shouldLoadSecondaryCharts,
+  });
+  const resultStatusSummaryQuery = useQuery({
+    queryKey: ["reports", "academics", "result-status", "dashboard"],
+    queryFn: reportsApi.resultStatusSummary,
+    enabled: isSuperAdmin && shouldLoadSecondaryCharts,
   });
   const enrollmentTrendQuery = useQuery({
     queryKey: ["reports", "students", "enrollment-trend", "dashboard"],
@@ -123,6 +164,27 @@ export default function DashboardPage() {
     queryFn: () => examResultsApi.list({ page: 1, limit: 100 }),
     enabled: isTeacherWorkspace && canReadExamResults,
   });
+  const academicSessionsReadyQuery = useQuery({
+    queryKey: ["academic-sessions", "dashboard-checklist"],
+    queryFn: () => academicSessionsApi.list({ page: 1, limit: 1 }),
+    enabled: !isTeacherWorkspace && !isSuperAdmin && canReadAcademicSessions && Boolean(summaryQuery.data),
+  });
+  const usersReadyQuery = useQuery({
+    queryKey: ["users", "dashboard-checklist"],
+    queryFn: () => usersApi.list({ page: 1, limit: 1 }),
+    enabled: !isTeacherWorkspace && !isSuperAdmin && canReadUsers && Boolean(summaryQuery.data),
+  });
+  const batchesReadyQuery = useQuery({
+    queryKey: ["batches", "dashboard-checklist"],
+    queryFn: () => batchesApi.list({ page: 1, limit: 1 }),
+    enabled: !isTeacherWorkspace && !isSuperAdmin && canReadBatches && Boolean(summaryQuery.data),
+  });
+  const feePlansReadyQuery = useQuery({
+    queryKey: ["fees", "plans", "dashboard-checklist"],
+    queryFn: () => feesApi.listPlans({ page: 1, limit: 1 }),
+    enabled: !isTeacherWorkspace && !isSuperAdmin && canReadFeePlans && Boolean(summaryQuery.data),
+  });
+  const feeOverview = feeCollectionOverviewQuery.data;
 
   if (!isTeacherWorkspace && summaryQuery.isError) {
     return <ErrorState description="Dashboard summary could not be loaded from the reports API." onRetry={() => summaryQuery.refetch()} />;
@@ -190,9 +252,216 @@ export default function DashboardPage() {
   const teacherQuickLinks = [
     { href: "/attendance", label: "Mark attendance", helper: "Update today’s classroom attendance." },
     { href: "/exam-results", label: "Enter results", helper: "Publish marks against your exams." },
-    { href: "/online-classes", label: "Open online classes", helper: "Launch, sync, or review class sessions." },
+    { href: "/online-classes", label: "Open online classes", helper: "Launch, sync, or review class occurrences." },
     { href: "/timetables", label: "Review timetable", helper: "Check your weekly teaching schedule." },
   ];
+
+  const adminPulse = useMemo(() => {
+    if (!isSuperAdmin) {
+      return null;
+    }
+
+    const userStatuses = userStatusSummaryQuery.data ?? [];
+    const batchStatuses = batchStatusSummaryQuery.data ?? [];
+    const resultStatuses = resultStatusSummaryQuery.data ?? [];
+    const roleDistribution = (userRoleDistributionQuery.data ?? []).slice().sort((left, right) => right.total - left.total);
+
+    return {
+      activeUsers: userStatuses.find((item) => item.status === "ACTIVE")?.total ?? 0,
+      inactiveUsers: userStatuses.find((item) => item.status === "INACTIVE")?.total ?? 0,
+      activeBatches: batchStatuses.find((item) => item.status === "ACTIVE")?.total ?? 0,
+      inactiveBatches: batchStatuses.find((item) => item.status === "INACTIVE")?.total ?? 0,
+      publishedExams: academicSummaryQuery.data?.publishedExams ?? 0,
+      finalizedResults: academicSummaryQuery.data?.publishedResults ?? resultStatuses.find((item) => item.status === "FINALIZED")?.total ?? 0,
+      averagePercentage: academicSummaryQuery.data?.averagePercentage ?? 0,
+      topRole: roleDistribution[0] ?? null,
+    };
+  }, [
+    academicSummaryQuery.data,
+    batchStatusSummaryQuery.data,
+    isSuperAdmin,
+    resultStatusSummaryQuery.data,
+    userRoleDistributionQuery.data,
+    userStatusSummaryQuery.data,
+  ]);
+
+  const tenantHealthBanner = useMemo(() => {
+    if (!currentSettingsQuery.data || isSuperAdmin) {
+      return null;
+    }
+
+    const organization = currentSettingsQuery.data;
+    const trialExpired =
+      organization.subscriptionStatus === "TRIAL" &&
+      organization.trialEndsAt !== null &&
+      new Date(organization.trialEndsAt).getTime() <= Date.now();
+    const trialExpiringSoon =
+      organization.subscriptionStatus === "TRIAL" &&
+      organization.trialEndsAt !== null &&
+      !trialExpired &&
+      new Date(organization.trialEndsAt).getTime() - Date.now() <= 7 * 24 * 60 * 60 * 1000;
+
+    if (!trialExpired && !trialExpiringSoon && organization.subscriptionStatus === "ACTIVE") {
+      return null;
+    }
+
+    const label = trialExpired
+      ? "Trial expired"
+      : trialExpiringSoon
+        ? "Trial ending soon"
+        : organization.subscriptionStatus.replaceAll("_", " ");
+
+    const description = trialExpired
+      ? "The current trial period has ended. Access is now limited until the subscription state is restored."
+      : trialExpiringSoon
+        ? `The trial ends on ${formatDate(organization.trialEndsAt as string, "MMM d, yyyy")}. Review billing and module readiness now.`
+        : organization.subscriptionStatus === "PAST_DUE"
+          ? "The organization is past due. Update billing to restore normal operations."
+          : "The subscription requires attention before the workspace is blocked.";
+
+    return {
+      label,
+      description,
+      tone: trialExpired || organization.subscriptionStatus === "PAST_DUE" || organization.subscriptionStatus === "SUSPENDED" ? ("rose" as const) : ("amber" as const),
+    };
+  }, [currentSettingsQuery.data, isSuperAdmin]);
+
+  const setupChecklist = useMemo(() => {
+    if (!summaryQuery.data && !isSuperAdmin && !isTeacherWorkspace) {
+      return [];
+    }
+
+    const items: Array<{
+      label: string;
+      description: string;
+      href: string;
+      done: boolean;
+    }> = [];
+
+    if (isSuperAdmin) {
+      items.push(
+        {
+          label: "Onboard an organization",
+          description: "Create the tenant boundary before assigning staff and students.",
+          href: "/organizations",
+          done: (organizationsQuery.data?.total ?? 0) > 0,
+        },
+        {
+          label: "Review roles and permissions",
+          description: "Keep role templates aligned with your deployment model.",
+          href: "/roles",
+          done: false,
+        },
+        {
+          label: "Inspect live inquiries",
+          description: "Track incoming leads and support requests from the platform inbox.",
+          href: "/inquiries",
+          done: false,
+        },
+      );
+      return items;
+    }
+
+    if (isTeacherWorkspace) {
+      items.push(
+        {
+          label: "Link your teacher profile",
+          description: "Make sure the login is mapped to a teacher record for workload visibility.",
+          href: "/teachers",
+          done: Boolean(teacherProfile),
+        },
+        {
+          label: "Check your timetable",
+          description: "Confirm today's classes and upcoming schedule blocks.",
+          href: "/timetables",
+          done: teacherTodayClasses.length > 0,
+        },
+        {
+          label: "Review result entries",
+          description: "Publish or update the exams you manage.",
+          href: "/exam-results",
+          done: teacherResultSnapshot.totalResults > 0,
+        },
+      );
+      return items;
+    }
+
+    const summary = summaryQuery.data;
+    if (!summary) return items;
+
+    const isAdminOrCoordinator = user?.roles.includes("ADMIN") || user?.roles.includes("ACADEMIC_COORDINATOR");
+    const hasUsers = (usersReadyQuery.data?.total ?? 0) > 0;
+    const hasStudents = summary.totalStudents > 0;
+    const hasBatches = (batchesReadyQuery.data?.total ?? 0) > 0;
+    const hasSessions = (academicSessionsReadyQuery.data?.total ?? 0) > 0;
+    const hasFeePlans = (feePlansReadyQuery.data?.total ?? 0) > 0;
+
+    if (isAdminOrCoordinator) {
+      if (canReadUsers) {
+        items.push({
+          label: "Add staff accounts",
+          description: "Create users for admins, coordinators, and office staff.",
+          href: "/users",
+          done: hasUsers,
+        });
+      }
+      if (canReadStudents) {
+        items.push({
+          label: "Register students",
+          description: "Capture admissions and guardian details before portal provisioning.",
+          href: "/students",
+          done: hasStudents,
+        });
+      }
+      if (canReadBatches) {
+        items.push({
+          label: "Build batch structure",
+          description: "Groups must exist before attendance, timetable, and exams are productive.",
+          href: "/batches",
+          done: hasBatches,
+        });
+      }
+      if (canReadFeePlans) {
+        items.push({
+          label: "Publish fee plans",
+          description: "Set up the billing plan before collecting or reconciling fees.",
+          href: "/fee-plans",
+          done: hasFeePlans,
+        });
+      }
+      if (canReadAcademicSessions) {
+        items.push({
+          label: "Define academic years / terms",
+          description: "Periods keep timetable, exams, and reports organized.",
+          href: "/academic-sessions",
+          done: hasSessions,
+        });
+      }
+    }
+
+    return items.slice(0, 5);
+  }, [
+    academicSessionsReadyQuery.data?.total,
+    feePlansReadyQuery.data?.total,
+    batchesReadyQuery.data?.total,
+    usersReadyQuery.data?.total,
+    isSuperAdmin,
+    isTeacherWorkspace,
+    canReadAcademicSessions,
+    canReadBatches,
+    canReadFeePlans,
+    canReadStudents,
+    canReadUsers,
+    organizationsQuery.data?.total,
+    summaryQuery.data,
+    teacherProfile,
+    teacherResultSnapshot.totalResults,
+    teacherTodayClasses.length,
+    user?.roles,
+  ]);
+  const setupCompleteCount = setupChecklist.filter((item) => item.done).length;
+  const setupCompletionRate = setupChecklist.length ? Math.round((setupCompleteCount / setupChecklist.length) * 100) : 0;
+  const nextSetupItem = setupChecklist.find((item) => !item.done) ?? setupChecklist[0] ?? null;
 
   if (isTeacherWorkspace) {
     const teacherQueries = [teacherProfileQuery, teacherTimetablesQuery, teacherAssignmentsQuery, teacherExamsQuery, teacherExamResultsQuery];
@@ -251,10 +520,10 @@ export default function DashboardPage() {
         )}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Today's classes" value={String(teacherTodayClasses.length)} helper="Scheduled sessions for today" icon={Presentation} tone="sky" />
+          <MetricCard title="Today's classes" value={String(teacherTodayClasses.length)} helper="Scheduled classes for today" icon={Presentation} tone="sky" />
           <MetricCard title="Assigned batches" value={String(teacherResultSnapshot.batches)} helper="Distinct batches currently mapped to you" icon={BookOpenCheck} tone="emerald" />
           <MetricCard title="Managed exams" value={String(teacherExamItems.length)} helper={`${teacherExamStatus.find((item) => item.name === "Published")?.value ?? 0} already published`} icon={ClipboardCheck} tone="violet" />
-          <MetricCard title="Online classes" value={String(onlineClassesSummaryQuery.data?.upcomingSessions.length ?? 0)} helper="Upcoming live or scheduled sessions" icon={Video} tone="amber" />
+          <MetricCard title="Online classes" value={String(onlineClassesSummaryQuery.data?.upcomingSessions.length ?? 0)} helper="Upcoming live or scheduled classes" icon={Video} tone="amber" />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-3">
@@ -265,7 +534,7 @@ export default function DashboardPage() {
             <CardContent className="space-y-3">
               {teacherTodayClasses.length ? (
                 teacherTodayClasses.map((entry) => (
-                  <div key={entry.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+                  <div key={entry.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                     <div>
                       <p className="font-medium">{entry.subjectName} · {entry.batchName}</p>
                       <p className="text-sm text-muted-foreground">{entry.startTime} - {entry.endTime}</p>
@@ -296,7 +565,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {teacherQuickLinks.map((item) => (
-                <div key={item.href} className="rounded-2xl border p-4">
+                <div key={item.href} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="font-medium">{item.label}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{item.helper}</p>
                   <Button variant="outline" size="sm" className="mt-3" asChild>
@@ -372,15 +641,15 @@ export default function DashboardPage() {
               <CardTitle>Result workload</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
-              <div className="rounded-2xl border p-4">
+              <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                 <p className="font-medium">Results prepared</p>
                 <p className="mt-1 text-muted-foreground">{teacherResultSnapshot.totalResults}</p>
               </div>
-              <div className="rounded-2xl border p-4">
+              <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                 <p className="font-medium">Published results</p>
                 <p className="mt-1 text-muted-foreground">{teacherResultSnapshot.publishedResults}</p>
               </div>
-              <div className="rounded-2xl border p-4">
+              <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                 <p className="font-medium">Average learner score</p>
                 <p className="mt-1 text-muted-foreground">{teacherResultSnapshot.averagePercentage}%</p>
               </div>
@@ -396,7 +665,7 @@ export default function DashboardPage() {
             <CardContent className="space-y-3">
               {onlineClassesSummaryQuery.data?.upcomingSessions.length ? (
                 onlineClassesSummaryQuery.data.upcomingSessions.slice(0, 3).map((session) => (
-                  <div key={session.id} className="rounded-2xl border p-4">
+                  <div key={session.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                     <p className="font-medium">{session.subjectName} · {session.batchCode}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{formatDate(session.scheduledStartAt, "MMM d, yyyy p")}</p>
                     <div className="mt-3 flex gap-2">
@@ -422,7 +691,6 @@ export default function DashboardPage() {
   }
 
   const metrics = summaryQuery.data ? metricCardData(summaryQuery.data) : [];
-  const feeOverview = feeCollectionOverviewQuery.data;
   const feeComparison = feePeriodComparisonQuery.data ?? [];
   const toTrend = (currentValue: number, previousValue: number): number | undefined => {
     if (previousValue <= 0) {
@@ -542,6 +810,17 @@ export default function DashboardPage() {
       .slice(0, 5);
     return { activeOrganizations, avgStudents, topModules, subscriptionMix, expiringTrials };
   }, [organizationsQuery.data]);
+  const adminRoleDistribution = userRoleDistributionQuery.data ?? [];
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
 
   return (
     <div className="space-y-6">
@@ -550,6 +829,92 @@ export default function DashboardPage() {
         title="Operational dashboard"
         description="Fee collection, pending dues, attendance, reminders, and recent operational activity drawn from the live backend contract."
       />
+
+      {tenantHealthBanner ? (
+        <Card className={tenantHealthBanner.tone === "rose" ? "border-rose-200 bg-rose-50/70" : "border-amber-200 bg-amber-50/70"}>
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6">
+            <div className="space-y-1">
+              <Badge variant={tenantHealthBanner.tone === "rose" ? "danger" : "warning"}>{tenantHealthBanner.label}</Badge>
+              <p className="text-sm text-muted-foreground">{tenantHealthBanner.description}</p>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/settings">Open settings</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {setupChecklist.length ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle>Onboarding tracker</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Track workspace readiness by role and move directly to the next missing setup step.
+              </p>
+            </div>
+            <Badge variant={setupCompletionRate === 100 ? "success" : "outline"}>{setupCompletionRate}% complete</Badge>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="rounded-2xl border bg-muted/20 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Workspace readiness</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {setupCompleteCount} of {setupChecklist.length} setup steps are complete.
+                    </p>
+                  </div>
+                  <Badge variant={setupCompletionRate === 100 ? "success" : setupCompletionRate >= 50 ? "warning" : "secondary"}>
+                    {setupCompletionRate >= 50 ? "Healthy" : "Needs setup"}
+                  </Badge>
+                </div>
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-200">
+                  <div className="h-full rounded-full bg-gradient-to-r from-sky-500 via-emerald-500 to-violet-500" style={{ width: `${setupCompletionRate}%` }} />
+                </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+                  <p className="text-muted-foreground">
+                    {nextSetupItem ? `Next step: ${nextSetupItem.label}` : "Everything is set up."}
+                  </p>
+                  {nextSetupItem ? (
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={nextSetupItem.href}>{nextSetupItem.done ? "Review" : "Open next step"}</Link>
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="grid gap-3">
+                <div className="rounded-2xl border bg-muted/20 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Completed</p>
+                  <p className="mt-2 text-3xl font-semibold tracking-tight">{setupCompleteCount}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Steps already finished and ready for review.</p>
+                </div>
+                <div className="rounded-2xl border bg-muted/20 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Remaining</p>
+                  <p className="mt-2 text-3xl font-semibold tracking-tight">{setupChecklist.length - setupCompleteCount}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Missing setup items that still need attention.</p>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {setupChecklist.map((item) => (
+                <div key={item.label} className="flex h-full flex-col justify-between rounded-2xl border bg-muted/20 p-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium">{item.label}</p>
+                      <Badge variant={item.done ? "success" : "secondary"}>{item.done ? "Done" : "Pending"}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{item.description}</p>
+                  </div>
+                  <Button className="mt-4 w-full" variant={item.done ? "outline" : "default"} size="sm" asChild>
+                    <Link href={item.href}>{item.done ? "Review" : "Open"}</Link>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {summaryQuery.isLoading || !summaryQuery.data ? (
         <LoadingState rows={4} />
@@ -580,6 +945,100 @@ export default function DashboardPage() {
           {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton key={index} className="h-32 rounded-3xl" />
           ))}
+        </div>
+      ) : null}
+
+      {isSuperAdmin ? (
+        <div className="space-y-4 rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-sky-50/60 p-5 shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Admin reporting</p>
+              <p className="mt-1 text-sm text-muted-foreground">A compact view of platform health, role mix, and operational throughput.</p>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/reports">Open full reports</Link>
+            </Button>
+          </div>
+          {adminPulse ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard title="Active users" value={String(adminPulse.activeUsers)} helper="Enabled user accounts" icon={ClipboardCheck} tone="sky" />
+              <MetricCard title="Active batches" value={String(adminPulse.activeBatches)} helper="Batches available for planning" icon={BookOpenCheck} tone="emerald" />
+              <MetricCard title="Published exams" value={String(adminPulse.publishedExams)} helper="Exam records already live" icon={Video} tone="violet" />
+              <MetricCard title="Published results" value={String(adminPulse.finalizedResults)} helper={`Avg ${adminPulse.averagePercentage}% across academic results`} icon={Clock3} tone="amber" />
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <Skeleton key={index} className="h-32 rounded-3xl" />
+              ))}
+            </div>
+          )}
+          <div className="grid gap-6 xl:grid-cols-3">
+            <Card className="xl:col-span-1">
+              <CardHeader>
+                <CardTitle>Role mix</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {adminRoleDistribution.length ? (
+                  adminRoleDistribution
+                    .slice()
+                    .sort((left, right) => right.total - left.total)
+                    .slice(0, 5)
+                    .map((item) => (
+                      <div key={item.roleId} className="flex items-center justify-between rounded-2xl border px-3 py-2 text-sm">
+                        <span className="font-medium">{item.roleName}</span>
+                        <Badge variant="outline">{item.total}</Badge>
+                      </div>
+                    ))
+              ) : (
+                  <EmptyState title="No role data" description="Role distribution will appear once the platform has active users." />
+                )}
+                <div className="pt-2">
+                  <Button variant="outline" size="sm" className="w-full" asChild>
+                    <Link href={buildActivityLogsHref({ module: "users" })}>Open user activity logs</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="xl:col-span-2">
+              <CardHeader>
+                <CardTitle>Recent activity</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {activityLogsQuery.data?.items?.length ? (
+                  activityLogsQuery.data.items.map((log) => (
+                    <div key={log.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3">
+                      <div>
+                        <p className="font-medium">
+                          {log.module} · {log.action.replaceAll("-", " ")}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {log.actorUser ? `${log.actorUser.firstName} ${log.actorUser.lastName}` : "System"} · {formatDate(log.createdAt, "MMM d, yyyy p")}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {log.organizationName ? <Badge variant="outline">{log.organizationName}</Badge> : null}
+                        {log.targetId ? <Badge variant="secondary">Target {log.targetId.slice(0, 8)}</Badge> : null}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState title="No recent activity" description="Recent audit events will appear here once the platform is in use." />
+                )}
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Bulk deletes</Link>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={buildActivityLogsHref({ action: "bulk-status" })}>Bulk status changes</Link>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={buildActivityLogsHref({ module: "fees" })}>Billing activity</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : null}
 
@@ -730,7 +1189,7 @@ export default function DashboardPage() {
             <CardContent className="space-y-3">
               {tenantInsights.expiringTrials.length ? (
                 tenantInsights.expiringTrials.map((organization) => (
-                  <div key={organization.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+                  <div key={organization.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                     <div>
                       <p className="font-medium">{organization.name}</p>
                       <p className="text-sm text-muted-foreground">
@@ -819,7 +1278,7 @@ export default function DashboardPage() {
             <CardContent className="space-y-3">
               {onlineClassesSummaryQuery.data?.upcomingSessions.length ? (
                 onlineClassesSummaryQuery.data.upcomingSessions.map((session) => (
-                  <div key={session.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+                  <div key={session.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                     <div>
                       <p className="font-medium">{session.subjectName} · {session.batchName}</p>
                       <p className="text-sm text-muted-foreground">
@@ -855,7 +1314,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               {onlineClassesSummaryQuery.data?.lastRun ? (
-                <div className="rounded-2xl border p-4">
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <p className="font-medium">Last automation run</p>
                   <p className="mt-1 text-muted-foreground">
                     {`${onlineClassesSummaryQuery.data.lastRun.status} · ${formatDate(onlineClassesSummaryQuery.data.lastRun.startedAt, "MMM d, yyyy p")}`}
@@ -864,12 +1323,12 @@ export default function DashboardPage() {
               ) : (
                 <EmptyState title="No automation run yet" description="Online class automation has not recorded a run yet." />
               )}
-              <div className="rounded-2xl border p-4">
-                <p className="font-medium">Failed sync sessions</p>
+              <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
+                <p className="font-medium">Failed sync attempts</p>
                 <p className="mt-1 text-muted-foreground">{onlineClassesSummaryQuery.data?.failedSessionsCount ?? 0}</p>
               </div>
-              <div className="rounded-2xl border p-4">
-                <p className="font-medium">Pending attendance sessions</p>
+              <div className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
+                <p className="font-medium">Pending attendance records</p>
                 <p className="mt-1 text-muted-foreground">{onlineClassesSummaryQuery.data?.pendingAttendanceCount ?? 0}</p>
               </div>
               <Button className="w-full" variant="outline" asChild>
@@ -975,6 +1434,9 @@ export default function DashboardPage() {
             <Button className="w-full justify-start" variant="outline" asChild>
               <Link href="/reports">Open full reports workspace</Link>
             </Button>
+            <Button className="w-full justify-start" variant="outline" asChild>
+              <Link href={buildActivityLogsHref({ module: "auth" })}>Review authentication trail</Link>
+            </Button>
             {canReadOnlineClasses ? (
               <Button className="w-full justify-start" variant="outline" asChild>
                 <Link href="/online-classes">Open online class operations</Link>
@@ -989,7 +1451,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               {tenantInsights.topModules.map((moduleItem) => (
-                <div key={moduleItem.moduleName} className="flex items-center justify-between rounded-xl border px-4 py-3">
+                <div key={moduleItem.moduleName} className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-3 shadow-sm">
                   <span className="text-muted-foreground">{moduleItem.moduleName.replaceAll("_", " ")}</span>
                   <span className="font-medium">{moduleItem.count}</span>
                 </div>
@@ -1022,15 +1484,15 @@ export default function DashboardPage() {
             <CardTitle>Finance pulse</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <div className="rounded-xl bg-muted/70 p-4">
+            <div className="rounded-2xl border border-border/70 bg-muted/70 p-4 shadow-sm">
               {summaryQuery.data?.totalStudents ?? 0} total students currently tracked in the active tenant scope.
             </div>
-            <div className="rounded-xl bg-muted/70 p-4">
+            <div className="rounded-2xl border border-border/70 bg-muted/70 p-4 shadow-sm">
               {feeOverview
                 ? `${formatCurrency(feeOverview.currentMonth.collected)} collected against ${formatCurrency(feeOverview.currentMonth.billed)} billed this month.`
                 : `${(attendanceBreakdownQuery.data ?? []).reduce((total, entry) => total + entry.total, 0)} attendance rows contributing to today’s distribution.`}
             </div>
-            <div className="rounded-xl bg-muted/70 p-4">
+            <div className="rounded-2xl border border-border/70 bg-muted/70 p-4 shadow-sm">
               {feeOverview
                 ? `${formatCurrency(feeOverview.currentYear.pending)} still pending this year, with ${formatCurrency(feeOverview.currentMonth.overdue)} already overdue for the current month.`
                 : `${(reminderBreakdownQuery.data ?? []).reduce((total, entry) => total + entry.count, 0)} reminders reflected in the current analytics snapshot.`}
@@ -1044,7 +1506,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               {(activityLogsQuery.data?.items ?? []).slice(0, 5).map((log) => (
-                <div key={log.id} className="rounded-xl bg-muted/70 p-4">
+                <div key={log.id} className="rounded-2xl border border-border/70 bg-muted/70 p-4 shadow-sm">
                   <p className="font-medium">
                     {log.actorUser ? `${log.actorUser.firstName} ${log.actorUser.lastName}` : "System"} · {log.module} · {log.action}
                   </p>

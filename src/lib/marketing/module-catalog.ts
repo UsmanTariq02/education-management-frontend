@@ -40,6 +40,16 @@ export const publicModuleCatalog = [
     description: "Send manual and automated fee follow-ups with templates, schedules, channels, and delivery history.",
   },
   {
+    key: "AI",
+    title: "AI automation workspace",
+    description: "Draft notices, mail replies, support responses, admission extractions, and intervention suggestions with approval control.",
+  },
+  {
+    key: "MAIL",
+    title: "Internal mail",
+    description: "Let students, teachers, and staff exchange inbox messages, drafts, starred items, and threaded conversations.",
+  },
+  {
     key: "REPORTS",
     title: "Reports and analytics",
     description: "Review collection, attendance, reminder, and academic trends with chart-ready summaries for management.",
@@ -62,3 +72,4 @@ export const publicModuleCatalog = [
 ] as const;
 
 export const publicModuleOptions = publicModuleCatalog.map((module) => module.title);
+export const publicModuleCount = publicModuleCatalog.length;

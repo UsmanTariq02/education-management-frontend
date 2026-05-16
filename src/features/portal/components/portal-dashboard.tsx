@@ -142,14 +142,14 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
           <CardContent className="relative p-6">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.2),_transparent_28%),radial-gradient(circle_at_bottom_left,_rgba(125,211,252,0.18),_transparent_26%)]" />
             <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-3">
+              <div className="min-w-0 space-y-3">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-sky-100">
                   <achievement.icon className="h-3.5 w-3.5" />
                   {achievement.eyebrow}
                 </div>
-                <div>
-                  <h2 className="text-2xl font-semibold tracking-tight">{achievement.title}</h2>
-                  <p className="mt-2 max-w-2xl text-sm text-slate-200">{achievement.description}</p>
+                <div className="min-w-0">
+                  <h2 className="break-words text-2xl font-semibold tracking-tight">{achievement.title}</h2>
+                  <p className="mt-2 max-w-2xl break-words text-sm text-slate-200">{achievement.description}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge className="border-white/10 bg-white/12 text-white hover:bg-white/12">
@@ -165,13 +165,13 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:w-[320px]">
                 {achievement.highlights.map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-white/12 bg-white/10 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-200">{item.label}</p>
+                  <div key={item.label} className="min-w-0 rounded-2xl border border-white/12 bg-white/10 p-4">
+                    <p className="break-words text-xs uppercase tracking-[0.2em] text-slate-200">{item.label}</p>
                     <p className="mt-2 text-xl font-semibold">{item.value}</p>
-                    <p className="mt-1 text-xs text-slate-300">{item.caption}</p>
+                    <p className="mt-1 break-words text-xs text-slate-300">{item.caption}</p>
                   </div>
                 ))}
-                <div className="rounded-2xl border border-white/12 bg-white/10 p-4 sm:col-span-2">
+                <div className="min-w-0 rounded-2xl border border-white/12 bg-white/10 p-4 sm:col-span-2">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Class rank</p>
                   <p className="mt-2 text-xl font-semibold">
                     {reportCardQuery.data?.classRank ? `#${reportCardQuery.data.classRank} of ${reportCardQuery.data.classSize}` : "Pending"}
@@ -183,7 +183,7 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200/80">
+        <Card className="border-border/70 bg-card/85 shadow-sm backdrop-blur">
           <CardHeader>
             <CardTitle>Next target</CardTitle>
             <CardDescription>
@@ -193,7 +193,7 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-[1.5rem] border bg-slate-50 p-4">
+            <div className="rounded-2xl border border-border/70 bg-slate-50 p-4 shadow-sm">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <Target className="h-4 w-4 text-sky-600" />
                 Motivation note
@@ -202,24 +202,24 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
             </div>
             <div className="space-y-3">
               {achievement.actions.map((action) => (
-                <div key={action.title} className="rounded-2xl border p-4 text-sm">
+                <div key={action.title} className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                   <p className="font-medium text-slate-900">{action.title}</p>
-                  <p className="mt-1 text-slate-600">{action.description}</p>
+                  <p className="mt-1 break-words text-slate-600">{action.description}</p>
                 </div>
               ))}
               {reportCardQuery.data?.focusAreas?.length ? (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm shadow-sm">
                   <div className="flex items-center gap-2 font-medium text-amber-900">
                     <Target className="h-4 w-4" />
                     Focus more on
                   </div>
                   <div className="mt-3 space-y-3">
                     {reportCardQuery.data.focusAreas.slice(0, 2).map((item) => (
-                      <div key={item.subjectId} className="rounded-xl border border-amber-200 bg-white/70 p-3">
-                        <p className="font-medium text-slate-900">
+                      <div key={item.subjectId} className="min-w-0 rounded-2xl border border-amber-200 bg-background/80 p-3 shadow-sm">
+                        <p className="break-words font-medium text-slate-900">
                           {item.subjectName} ({item.subjectCode})
                         </p>
-                        <p className="mt-1 text-slate-600">
+                        <p className="mt-1 break-words text-slate-600">
                           {item.combinedPercentage !== null ? `${item.combinedPercentage}% combined.` : "No combined score yet."} {item.message}
                         </p>
                       </div>
@@ -341,17 +341,17 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
           <CardContent className="space-y-3">
             {academicSummary.timetable.length ? (
               academicSummary.timetable.slice(0, 8).map((entry) => (
-                <div key={entry.id} className="rounded-2xl border p-3 text-sm">
+                <div key={entry.id} className="rounded-2xl border border-border/70 bg-background/70 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{entry.subjectName}</p>
-                      <p className="text-muted-foreground">
+                    <div className="min-w-0">
+                      <p className="break-words font-medium">{entry.subjectName}</p>
+                      <p className="break-words text-muted-foreground">
                         {entry.dayOfWeek} · {entry.startTime} - {entry.endTime}
                       </p>
                     </div>
-                    <div className="text-right text-muted-foreground">
-                      <p>{entry.batchName}</p>
-                      <p>{entry.teacherName ?? "Teacher pending"}</p>
+                    <div className="min-w-0 text-right text-muted-foreground">
+                      <p className="break-words">{entry.batchName}</p>
+                      <p className="break-words">{entry.teacherName ?? "Teacher pending"}</p>
                     </div>
                   </div>
                 </div>
@@ -372,19 +372,19 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
           <CardContent className="space-y-3">
             {feeSummary.recentRecords.length ? (
               feeSummary.recentRecords.slice(0, 6).map((item) => (
-                <div key={item.id} className="rounded-2xl border p-4 text-sm">
+                <div key={item.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">
+                    <div className="min-w-0">
+                      <p className="break-words font-medium">
                         {item.month}/{item.year}
                       </p>
-                      <p className="text-muted-foreground">
+                      <p className="break-words text-muted-foreground">
                         Due {formatCurrency(item.amountDue)} · Paid {formatCurrency(item.amountPaid)}
                       </p>
                     </div>
                     <Badge variant={item.status === "PAID" ? "success" : "warning"}>{item.status}</Badge>
                   </div>
-                  <p className="mt-2 text-muted-foreground">
+                  <p className="mt-2 break-words text-muted-foreground">
                     {item.paidAt ? `Last payment on ${formatDate(item.paidAt)}` : "Payment still pending"}
                   </p>
                 </div>
@@ -403,7 +403,7 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
           <CardContent className="space-y-3">
             {reminderSummary.recentRecords.length ? (
               reminderSummary.recentRecords.map((item) => (
-                <div key={item.id} className="rounded-2xl border p-3 text-sm">
+                <div key={item.id} className="rounded-2xl border border-border/70 bg-background/70 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-2">
                     <Badge variant="outline">{item.channel}</Badge>
                     <Badge variant={item.status === "SENT" ? "success" : "warning"}>{item.status}</Badge>
@@ -437,7 +437,7 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
         <CardContent className="space-y-3">
           {activityFeedQuery.data?.length ? (
             activityFeedQuery.data.slice(0, 4).map((item) => (
-              <div key={item.id} className="rounded-2xl border p-4 text-sm">
+              <div key={item.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{item.kind.replaceAll("_", " ")}</Badge>
@@ -445,8 +445,8 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
                   </div>
                   <span className="text-xs text-muted-foreground">{formatDate(item.occurredAt, "MMM d, yyyy p")}</span>
                 </div>
-                <p className="mt-2 font-medium">{item.title}</p>
-                <p className="mt-1 text-muted-foreground">{item.description}</p>
+                <p className="mt-2 break-words font-medium">{item.title}</p>
+                <p className="mt-1 break-words text-muted-foreground">{item.description}</p>
                 {item.scoreLabel || item.actorName ? (
                   <p className="mt-2 text-xs text-muted-foreground">
                     {[item.scoreLabel, item.actorName ? `by ${item.actorName}` : null].filter(Boolean).join(" · ")}
@@ -503,11 +503,11 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
           <CardContent className="space-y-3">
             {academicSummary.assessmentSummary.recentAttempts.length ? (
               academicSummary.assessmentSummary.recentAttempts.map((attempt) => (
-                <div key={attempt.attemptId} className="rounded-2xl border p-3 text-sm">
+                <div key={attempt.attemptId} className="rounded-2xl border border-border/70 bg-background/70 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-medium">{attempt.title}</p>
-                      <p className="text-muted-foreground">
+                      <p className="break-words font-medium">{attempt.title}</p>
+                      <p className="break-words text-muted-foreground">
                         {attempt.subjectName}
                         {attempt.percentage !== null ? ` · ${attempt.percentage}%` : ""}
                       </p>
@@ -569,12 +569,12 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
           <CardContent className="space-y-3">
             {announcementsQuery.data?.length ? (
               announcementsQuery.data.slice(0, 3).map((item) => (
-                <div key={item.id} className="rounded-2xl border p-4 text-sm">
+                <div key={item.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-medium">{item.title}</p>
                     <Badge variant={item.isPinned ? "warning" : "outline"}>{item.category}</Badge>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-muted-foreground">{item.body}</p>
+                <p className="mt-1 line-clamp-2 break-words text-muted-foreground">{item.body}</p>
                 </div>
               ))
             ) : (
@@ -603,14 +603,14 @@ export function PortalDashboard({ variant }: { variant: "student" | "parent" }) 
           <CardContent className="space-y-3">
             {acknowledgementQuery.data?.length ? (
               acknowledgementQuery.data.slice(0, 4).map((item) => (
-                <div key={item.itemKey} className="rounded-2xl border p-4 text-sm">
+                <div key={item.itemKey} className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium">{item.title}</p>
+                    <p className="break-words font-medium">{item.title}</p>
                     <Badge variant={item.acknowledgedAt ? "success" : "warning"}>
                       {item.acknowledgedAt ? "Acknowledged" : "Pending"}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-muted-foreground">{item.description}</p>
+                  <p className="mt-1 break-words text-muted-foreground">{item.description}</p>
                 </div>
               ))
             ) : (

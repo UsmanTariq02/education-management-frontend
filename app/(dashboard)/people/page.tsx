@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ArrowUpRight, BriefcaseBusiness, GraduationCap, ShieldCheck, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
+import { toast } from "sonner";
 import { MetricCard } from "@/components/cards/metric-card";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
@@ -15,11 +16,13 @@ import { DataTable } from "@/components/tables/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { studentsApi } from "@/features/students/api/students-api";
 import { teachersApi } from "@/features/teachers/api/teachers-api";
 import { usersApi } from "@/features/users/api/users-api";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useAnyPermission, usePermission } from "@/hooks/use-permission";
+import { useSavedFilterPresets } from "@/hooks/use-saved-filter-presets";
 import { useAuth } from "@/providers/auth-provider";
 
 type DirectoryPerson = {
@@ -37,6 +40,7 @@ type DirectoryPerson = {
 export default function PeopleDirectoryPage() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
+  const [selectedPresetId, setSelectedPresetId] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [pageIndex, setPageIndex] = useState(0);
@@ -44,9 +48,15 @@ export default function PeopleDirectoryPage() {
   const canReadUsers = useAnyPermission(["users.read"]);
   const canReadTeachers = useAnyPermission(["teachers.read"]);
   const canReadStudents = useAnyPermission(["students.read"]);
+  const canCreateUsers = usePermission("users.create");
+  const canCreateStudents = usePermission("students.create");
   const canManageUsers = usePermission("users.update");
   const canManageTeachers = usePermission("teachers.update");
   const canManageStudents = usePermission("students.update");
+  const savedPeopleFilterPresets = useSavedFilterPresets<{
+    search: string;
+    typeFilter: string;
+  }>("people-filter-presets");
 
   const usersQuery = useQuery({
     queryKey: ["people-directory", "users", debouncedSearch, user?.id ?? "guest", user?.organizationId ?? "platform"],
@@ -222,12 +232,27 @@ export default function PeopleDirectoryPage() {
         description="Browse users, teachers, and students from one operational directory without mixing their creation flows."
       />
       <OrganizationScopeBanner moduleLabel="Unified people directory" />
-      <div className="rounded-2xl border bg-muted/30 p-4 text-sm">
+      <div className="rounded-[1.75rem] border border-border/70 bg-muted/30 p-4 text-sm shadow-sm">
         <p className="font-medium">Recommended use</p>
         <p className="mt-1 text-muted-foreground">
           Use this directory to search across the whole tenant workforce and learner base. Creation still stays separated: users for access roles, teachers for faculty, and students for admissions and portal provisioning.
         </p>
       </div>
+      {canCreateUsers || canCreateStudents ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-[1.75rem] border border-border/70 bg-card/85 px-4 py-3 shadow-sm backdrop-blur">
+          <span className="text-sm font-medium text-muted-foreground">Quick create</span>
+          {canCreateUsers ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/users?create=1">Add user</Link>
+            </Button>
+          ) : null}
+          {canCreateStudents ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/students?create=1">Add student</Link>
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="Visible people" value={String(stats.total)} helper="Combined users, teachers, and students" icon={Users} tone="sky" />
         <MetricCard title="Users" value={String(stats.users)} helper="Access-role identities" icon={ShieldCheck} tone="emerald" />
@@ -257,6 +282,65 @@ export default function PeopleDirectoryPage() {
           </NativeSelect>
         }
       />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 px-4 py-3 text-sm shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Saved views</span>
+          <Select
+            value={selectedPresetId}
+            onValueChange={(presetId) => {
+              const preset = savedPeopleFilterPresets.presets.find((item) => item.id === presetId);
+              if (!preset) return;
+              setSearch(preset.value.search);
+              setTypeFilter(preset.value.typeFilter);
+              setSelectedPresetId(preset.id);
+              setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select saved view" />
+            </SelectTrigger>
+            <SelectContent>
+              {savedPeopleFilterPresets.presets.length === 0 ? (
+                <SelectItem value="__none" disabled>
+                  No saved views yet
+                </SelectItem>
+              ) : (
+                savedPeopleFilterPresets.presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const name = window.prompt("Save the current people search as:");
+              const preset = name ? savedPeopleFilterPresets.savePreset(name, { search, typeFilter }) : null;
+              if (preset) {
+                setSelectedPresetId(preset.id);
+                toast.success(`Saved view "${preset.name}"`);
+              }
+            }}
+          >
+            Save current view
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              savedPeopleFilterPresets.clearPresets();
+              setSelectedPresetId("");
+              toast.success("Saved people views cleared");
+            }}
+            disabled={savedPeopleFilterPresets.presets.length === 0}
+          >
+            Clear saved views
+          </Button>
+        </div>
+      </div>
       <DataTable
         data={pagedRows}
         columns={columns}

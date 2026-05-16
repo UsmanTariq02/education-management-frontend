@@ -220,7 +220,7 @@ export default function ReportCardsPage() {
       <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search by student, email, or batch..." />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {reportCardsQuery.data.items.map((item) => (
-          <div key={item.studentId} className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div key={item.studentId} className="rounded-2xl border border-border/70 bg-card/85 p-5 shadow-sm backdrop-blur">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-lg font-semibold">{item.studentName}</p>
@@ -229,15 +229,15 @@ export default function ReportCardsPage() {
               <Badge variant={item.overallPercentage >= 70 ? "success" : item.overallPercentage >= 50 ? "warning" : "danger"}>{item.overallGrade}</Badge>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-              <div className="rounded-xl bg-muted p-3">
+              <div className="rounded-2xl border border-border/70 bg-muted p-3 shadow-sm">
                 <p className="text-xs text-muted-foreground">Overall</p>
                 <p className="text-base font-semibold">{item.overallPercentage}%</p>
               </div>
-              <div className="rounded-xl bg-muted p-3">
+              <div className="rounded-2xl border border-border/70 bg-muted p-3 shadow-sm">
                 <p className="text-xs text-muted-foreground">Exams</p>
                 <p className="text-base font-semibold">{item.examPercentage !== null ? `${item.examPercentage}%` : "—"}</p>
               </div>
-              <div className="rounded-xl bg-muted p-3">
+              <div className="rounded-2xl border border-border/70 bg-muted p-3 shadow-sm">
                 <p className="text-xs text-muted-foreground">Assignments</p>
                 <p className="text-base font-semibold">{item.assignmentPercentage !== null ? `${item.assignmentPercentage}%` : "—"}</p>
               </div>

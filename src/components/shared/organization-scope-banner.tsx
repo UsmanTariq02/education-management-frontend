@@ -4,6 +4,7 @@ import { Building2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/providers/auth-provider";
+import { getAiAccessLabel, hasAiAccess } from "@/lib/ai/access";
 
 interface OrganizationScopeBannerProps {
   moduleLabel: string;
@@ -12,6 +13,8 @@ interface OrganizationScopeBannerProps {
 export function OrganizationScopeBanner({ moduleLabel }: OrganizationScopeBannerProps) {
   const { user } = useAuth();
   const hasTenantContext = Boolean(user?.organizationId);
+  const aiReady = hasAiAccess(user);
+  const aiLabel = getAiAccessLabel(user);
 
   return (
     <Card className={hasTenantContext ? "border-primary/20 bg-primary/5" : "border-amber-500/30 bg-amber-50"}>
@@ -31,7 +34,10 @@ export function OrganizationScopeBanner({ moduleLabel }: OrganizationScopeBanner
             </p>
           </div>
         </div>
-        <Badge variant="secondary">{user?.organizationName ?? "Platform scope"}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">{user?.organizationName ?? "Platform scope"}</Badge>
+          {hasTenantContext ? <Badge variant={aiReady ? "success" : "warning"}>{aiReady ? aiLabel : "AI key missing"}</Badge> : null}
+        </div>
       </CardContent>
     </Card>
   );

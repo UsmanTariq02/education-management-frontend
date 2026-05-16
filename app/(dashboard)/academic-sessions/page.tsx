@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { CalendarDays, CheckCircle2, GraduationCap, TimerReset } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { MetricCard } from "@/components/cards/metric-card";
@@ -30,6 +30,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePermission } from "@/hooks/use-permission";
 import { normalizeApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/formatters";
+import { exportRowsToCsv } from "@/lib/utils/export";
 import { useAuth } from "@/providers/auth-provider";
 import type { AcademicSession } from "@/types/domain";
 
@@ -41,10 +42,12 @@ export default function AcademicSessionsPage() {
   const [pageIndex, setPageIndex] = useState(0);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [open, setOpen] = useState(false);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [editingSession, setEditingSession] = useState<AcademicSession | null>(null);
   const [selectedSession, setSelectedSession] = useState<AcademicSession | null>(null);
   const canCreate = usePermission("academic-sessions.create");
   const canManage = usePermission("academic-sessions.update");
+  const canDelete = usePermission("academic-sessions.delete");
   const query = useQuery({
     queryKey: ["academic-sessions", debouncedSearch, pageIndex],
     queryFn: () => academicSessionsApi.list({ page: pageIndex + 1, limit: 10, search: debouncedSearch }),
@@ -71,11 +74,31 @@ export default function AcademicSessionsPage() {
       return academicSessionsApi.create(values);
     },
     onSuccess: () => {
-      toast.success(editingSession ? "Academic session updated" : "Academic session created");
+      toast.success(editingSession ? "Academic period updated" : "Academic period created");
       queryClient.invalidateQueries({ queryKey: ["academic-sessions"] });
       setOpen(false);
       setEditingSession(null);
       form.reset();
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => academicSessionsApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected periods deleted");
+      queryClient.invalidateQueries({ queryKey: ["academic-sessions"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: async (payload: { ids: string[]; isActive: boolean }) => academicSessionsApi.bulkUpdateStatus(payload.ids, payload.isActive),
+    onSuccess: (_, variables) => {
+      toast.success(variables.isActive ? "Selected periods activated" : "Selected periods deactivated");
+      queryClient.invalidateQueries({ queryKey: ["academic-sessions"] });
+      setRowSelection({});
     },
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
@@ -103,12 +126,30 @@ export default function AcademicSessionsPage() {
     }),
     [filteredItems],
   );
+  const selectedSessionIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedSessionExportRows = useMemo(
+    () =>
+      filteredItems
+        .filter((session) => selectedSessionIds.includes(session.id))
+        .map((session) => ({
+          Period: session.name,
+          Code: session.code,
+          Duration: `${formatDate(session.startDate)} - ${formatDate(session.endDate)}`,
+          Current: session.isCurrent ? "Yes" : "No",
+          Status: session.isActive ? "Active" : "Inactive",
+          Organization: session.organizationName ?? "",
+          Description: session.description ?? "",
+        })),
+    [filteredItems, selectedSessionIds],
+  );
 
   const columns = useMemo<Array<ColumnDef<AcademicSession>>>(
     () => [
       {
         accessorKey: "name",
-        header: "Session",
+        header: "Period",
         cell: ({ row }) => (
           <div>
             <p className="font-medium">{row.original.name}</p>
@@ -178,22 +219,22 @@ export default function AcademicSessionsPage() {
 
   if (query.isLoading) return <LoadingState rows={6} />;
   if (query.isError || !query.data) {
-    return <ErrorState description="Academic sessions could not be loaded." onRetry={() => query.refetch()} />;
+    return <ErrorState description="Academic years and terms could not be loaded." onRetry={() => query.refetch()} />;
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Academics"
-        title="Academic sessions"
-        description="Define yearly or term-based academic periods so exams, timetables, and promotions can anchor to a real session."
+        title="Academic years / terms"
+        description="Define yearly or term-based academic periods so exams, timetables, and promotions can anchor to the right calendar."
       />
       <OrganizationScopeBanner moduleLabel="Academic operations" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Visible sessions" value={String(stats.total)} helper="Sessions within the current table scope" icon={GraduationCap} tone="sky" />
-        <MetricCard title="Current sessions" value={String(stats.current)} helper="Active default session markers" icon={CheckCircle2} tone="emerald" />
-        <MetricCard title="Active sessions" value={String(stats.active)} helper="Sessions available for scheduling" icon={CalendarDays} tone="violet" />
-        <MetricCard title="Archived sessions" value={String(stats.archived)} helper="Historical or disabled sessions" icon={TimerReset} tone="amber" />
+        <MetricCard title="Visible periods" value={String(stats.total)} helper="Academic periods within the current table scope" icon={GraduationCap} tone="sky" />
+        <MetricCard title="Current periods" value={String(stats.current)} helper="Active default period markers" icon={CheckCircle2} tone="emerald" />
+        <MetricCard title="Active periods" value={String(stats.active)} helper="Periods available for scheduling" icon={CalendarDays} tone="violet" />
+        <MetricCard title="Archived periods" value={String(stats.archived)} helper="Historical or disabled periods" icon={TimerReset} tone="amber" />
       </div>
       <FilterBar
         search={search}
@@ -201,17 +242,17 @@ export default function AcademicSessionsPage() {
           setSearch(value);
           setPageIndex(0);
         }}
-        searchPlaceholder="Search sessions by name or code..."
+        searchPlaceholder="Search periods by name or code..."
         filters={
           <select
-            className="h-10 rounded-xl border bg-background px-3 text-sm"
+            className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm"
             value={statusFilter}
             onChange={(event) => {
               setStatusFilter(event.target.value);
               setPageIndex(0);
             }}
           >
-            <option value="ALL">All sessions</option>
+            <option value="ALL">All periods</option>
             <option value="CURRENT">Current only</option>
             <option value="ACTIVE">Active only</option>
             <option value="INACTIVE">Inactive only</option>
@@ -222,16 +263,16 @@ export default function AcademicSessionsPage() {
             <Dialog open={open} onOpenChange={setOpen}>
               {canCreate ? (
                 <DialogTrigger asChild>
-                  <Button disabled={!user?.organizationId}>Create session</Button>
+                  <Button disabled={!user?.organizationId}>Create period</Button>
                 </DialogTrigger>
               ) : null}
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{editingSession ? "Edit academic session" : "Create academic session"}</DialogTitle>
-                  <DialogDescription>Only one session should normally be flagged as current for each organization.</DialogDescription>
+                  <DialogTitle>{editingSession ? "Edit academic period" : "Create academic period"}</DialogTitle>
+                  <DialogDescription>Only one period should normally be flagged as current for each organization.</DialogDescription>
                 </DialogHeader>
                 <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-                  <FormField label="Session name" required error={form.formState.errors.name}>
+                  <FormField label="Period name" required error={form.formState.errors.name}>
                     <Input {...form.register("name")} />
                   </FormField>
                   <FormField label="Code" required error={form.formState.errors.code}>
@@ -246,14 +287,14 @@ export default function AcademicSessionsPage() {
                   <FormField label="Description" error={form.formState.errors.description} className="md:col-span-2">
                     <Input {...form.register("description")} />
                   </FormField>
-                  <Checkbox {...form.register("isCurrent")} label="Mark as current session" />
-                  <Checkbox {...form.register("isActive")} label="Keep session active" />
+                  <Checkbox {...form.register("isCurrent")} label="Mark as current period" />
+                  <Checkbox {...form.register("isActive")} label="Keep period active" />
                   <div className="md:col-span-2 flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                       Cancel
                     </Button>
                     <Button type="submit" disabled={mutation.isPending}>
-                      {editingSession ? "Save changes" : "Create session"}
+                      {editingSession ? "Save changes" : "Create period"}
                     </Button>
                   </div>
                 </form>
@@ -262,18 +303,67 @@ export default function AcademicSessionsPage() {
           ) : null
         }
       />
+      {selectedSessionIds.length > 0 && (canManage || canDelete) ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedSessionIds.length} period{selectedSessionIds.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "academic-periods-selected", rows: selectedSessionExportRows })}
+              disabled={selectedSessionExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            {canManage ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => bulkStatusMutation.mutate({ ids: selectedSessionIds, isActive: true })}
+                  disabled={bulkStatusMutation.isPending || bulkDeleteMutation.isPending}
+                >
+                  Activate selected
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => bulkStatusMutation.mutate({ ids: selectedSessionIds, isActive: false })}
+                  disabled={bulkStatusMutation.isPending || bulkDeleteMutation.isPending}
+                >
+                  Deactivate selected
+                </Button>
+              </>
+            ) : null}
+            {canDelete ? (
+              <Button
+                variant="destructive"
+                onClick={() => bulkDeleteMutation.mutate(selectedSessionIds)}
+                disabled={bulkDeleteMutation.isPending || bulkStatusMutation.isPending}
+              >
+                {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <DataTable
         data={filteredItems}
         columns={columns}
         pageCount={Math.ceil(query.data.total / query.data.limit)}
         pagination={{ pageIndex, pageSize: query.data.limit }}
         onPaginationChange={(state) => setPageIndex(state.pageIndex)}
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
       <Dialog open={Boolean(selectedSession)} onOpenChange={(nextOpen) => !nextOpen && setSelectedSession(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Academic session detail</DialogTitle>
-            <DialogDescription>Review the session timeline and default academic state.</DialogDescription>
+            <DialogTitle>Academic period detail</DialogTitle>
+            <DialogDescription>Review the period timeline and default academic state.</DialogDescription>
           </DialogHeader>
           {selectedSession ? (
             <div className="grid gap-3 md:grid-cols-2">

@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CalendarClock, DoorOpen, LayoutGrid, Rows3, TableProperties, UserRound } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { batchesApi } from "@/features/batches/api/batches-api";
@@ -31,6 +32,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePermission } from "@/hooks/use-permission";
 import { normalizeApiError } from "@/lib/api/errors";
 import { useAuth } from "@/providers/auth-provider";
+import { exportRowsToCsv } from "@/lib/utils/export";
 import type { TimetableEntry, TimetableDayOfWeek } from "@/types/domain";
 
 const days: TimetableDayOfWeek[] = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
@@ -42,6 +44,7 @@ export default function TimetablesPage() {
   const debouncedSearch = useDebouncedValue(search);
   const [viewMode, setViewMode] = useState<"table" | "week" | "teachers" | "rooms">("week");
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<TimetableEntry | null>(null);
   const [selectedItem, setSelectedItem] = useState<TimetableEntry | null>(null);
@@ -126,6 +129,16 @@ export default function TimetablesPage() {
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => timetablesApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected timetable entries deleted");
+      queryClient.invalidateQueries({ queryKey: ["timetables"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
   const items = query.data?.items ?? [];
   const stats = useMemo(
     () => ({
@@ -135,6 +148,25 @@ export default function TimetablesPage() {
       active: items.filter((item) => item.isActive).length,
     }),
     [items],
+  );
+  const selectedTimetableIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedTimetableExportRows = useMemo(
+    () =>
+      items
+        .filter((item) => selectedTimetableIds.includes(item.id))
+        .map((item) => ({
+          Day: item.dayOfWeek,
+          Batch: item.batchName,
+          Subject: item.subjectName,
+          Teacher: item.teacherName ?? "Unassigned",
+          Time: `${item.startTime} - ${item.endTime}`,
+          Mode: item.deliveryMode,
+          Room: item.deliveryMode === "ONLINE" ? "Online" : item.room ?? "N/A",
+          Status: item.isActive ? "Active" : "Inactive",
+        })),
+    [items, selectedTimetableIds],
   );
   const weeklyBoard = useMemo(
     () =>
@@ -210,6 +242,16 @@ export default function TimetablesPage() {
         .sort((left, right) => right.totalClasses - left.totalClasses),
     [items],
   );
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
 
   const columns = useMemo<Array<ColumnDef<TimetableEntry>>>(
     () => [
@@ -315,7 +357,7 @@ export default function TimetablesPage() {
       <PageHeader
         eyebrow="Academics"
         title="Timetable planner"
-        description="Create timetable slots tied to batches, subjects, teachers, and academic sessions so the academic calendar becomes operational."
+        description="Create timetable slots tied to batches, subjects, teachers, and academic years or terms so the academic calendar becomes operational."
       />
       <OrganizationScopeBanner moduleLabel="Academic operations" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -324,6 +366,44 @@ export default function TimetablesPage() {
         <MetricCard title="Teacher mapped" value={String(stats.teacherMapped)} helper="Entries already tied to a teacher" icon={UserRound} tone="emerald" />
         <MetricCard title="Active entries" value={String(stats.active)} helper="Entries considered part of the live timetable" icon={CalendarClock} tone="amber" />
       </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ module: "timetables" })}>Audit timetable events</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Audit bulk deletes</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "create" })}>Audit timetable creation</Link>
+        </Button>
+      </div>
+
+      {selectedTimetableIds.length > 0 && canManage ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedTimetableIds.length} timetable entr{selectedTimetableIds.length === 1 ? "y" : "ies"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "timetables-selected", rows: selectedTimetableExportRows })}
+              disabled={selectedTimetableExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => bulkDeleteMutation.mutate(selectedTimetableIds)}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <FilterBar
         search={search}
         onSearchChange={(value) => {
@@ -345,9 +425,9 @@ export default function TimetablesPage() {
                   <DialogDescription>Each slot should align with a subject assignment and reflect an actual daily classroom schedule.</DialogDescription>
                 </DialogHeader>
                 <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-                  <FormField label="Academic session" className="md:col-span-2">
+                  <FormField label="Academic year / term" className="md:col-span-2">
                     <NativeSelect {...form.register("academicSessionId")}>
-                      <option value="">General / all sessions</option>
+                      <option value="">General / all periods</option>
                       {sessionsQuery.data?.items.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.name}
@@ -395,10 +475,10 @@ export default function TimetablesPage() {
                     </NativeSelect>
                   </FormField>
                   <FormField label="Start time" required error={form.formState.errors.startTime}>
-                    <input className="h-10 rounded-xl border bg-background px-3 text-sm" type="time" {...form.register("startTime")} />
+                    <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" type="time" {...form.register("startTime")} />
                   </FormField>
                   <FormField label="End time" required error={form.formState.errors.endTime}>
-                    <input className="h-10 rounded-xl border bg-background px-3 text-sm" type="time" {...form.register("endTime")} />
+                    <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" type="time" {...form.register("endTime")} />
                   </FormField>
                   <FormField label="Delivery mode" required error={form.formState.errors.deliveryMode}>
                     <NativeSelect {...form.register("deliveryMode")}>
@@ -408,7 +488,7 @@ export default function TimetablesPage() {
                     </NativeSelect>
                   </FormField>
                   <FormField label="Room">
-                    <input className="h-10 rounded-xl border bg-background px-3 text-sm" {...form.register("room")} />
+                    <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("room")} />
                   </FormField>
                   {deliveryMode !== "OFFLINE" ? (
                     <>
@@ -420,17 +500,17 @@ export default function TimetablesPage() {
                         </NativeSelect>
                       </FormField>
                       <FormField label="Meeting URL">
-                        <input className="h-10 rounded-xl border bg-background px-3 text-sm" {...form.register("onlineMeetingUrl")} />
+                        <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("onlineMeetingUrl")} />
                       </FormField>
                       <FormField label="Meeting code">
-                        <input className="h-10 rounded-xl border bg-background px-3 text-sm" {...form.register("onlineMeetingCode")} />
+                        <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("onlineMeetingCode")} />
                       </FormField>
                       <FormField label="Calendar event ID">
-                        <input className="h-10 rounded-xl border bg-background px-3 text-sm" {...form.register("externalCalendarEventId")} />
+                        <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("externalCalendarEventId")} />
                       </FormField>
                       <FormField label="Join threshold (minutes)">
                         <input
-                          className="h-10 rounded-xl border bg-background px-3 text-sm"
+                          className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm"
                           type="number"
                           min={1}
                           {...form.register("attendanceJoinThresholdMinutes", { valueAsNumber: true })}
@@ -440,7 +520,7 @@ export default function TimetablesPage() {
                     </>
                   ) : null}
                   <FormField label="Notes" className="md:col-span-2">
-                    <input className="h-10 rounded-xl border bg-background px-3 text-sm" {...form.register("notes")} />
+                    <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("notes")} />
                   </FormField>
                   <Checkbox containerClassName="md:col-span-2" label="Keep timetable entry active" {...form.register("isActive")} />
                   <div className="md:col-span-2 flex justify-end gap-2">
@@ -609,13 +689,16 @@ export default function TimetablesPage() {
           pageCount={Math.ceil(query.data.total / query.data.limit)}
           pagination={{ pageIndex, pageSize: query.data.limit }}
           onPaginationChange={(state) => setPageIndex(state.pageIndex)}
+          enableRowSelection
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
         />
       ) : null}
       <Dialog open={Boolean(selectedItem)} onOpenChange={(nextOpen) => !nextOpen && setSelectedItem(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Timetable entry detail</DialogTitle>
-            <DialogDescription>Review the classroom slot, teacher allocation, and session context.</DialogDescription>
+            <DialogDescription>Review the classroom slot, teacher allocation, and academic period context.</DialogDescription>
           </DialogHeader>
           {selectedItem ? (
             <div className="space-y-3 text-sm">

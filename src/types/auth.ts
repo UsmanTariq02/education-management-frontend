@@ -7,6 +7,7 @@ export type OrganizationModule =
   | "FEES"
   | "ATTENDANCE"
   | "REMINDERS"
+  | "MAIL"
   | "REPORTS"
   | "ACTIVITY_LOGS"
   | "SETTINGS"
@@ -17,8 +18,12 @@ export interface AuthUser {
   email: string;
   organizationId: string | null;
   organizationName: string | null;
+  subscriptionStatus: "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELLED" | null;
+  trialEndsAt: string | null;
   userLimit: number | null;
   studentLimit: number | null;
+  hasOpenAiApiKey: boolean;
+  hasTrialAiAccess: boolean;
   enabledModules: OrganizationModule[];
   firstName: string;
   lastName: string;
@@ -79,6 +84,8 @@ export interface PortalAuthUser {
   studentId: string;
   organizationId: string;
   organizationName: string;
+  hasOpenAiApiKey: boolean;
+  hasTrialAiAccess: boolean;
   email: string;
   accountType: PortalAccountType;
   studentName: string;

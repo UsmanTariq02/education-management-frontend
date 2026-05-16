@@ -26,12 +26,15 @@ import type {
   UnifiedReportCard,
   UserRoleDistributionPoint,
   UserStatusPoint,
+  WeeklyPrincipalSummary,
 } from "@/types/domain";
 import type { PaginatedResult, PaginationParams } from "@/types/api";
 import { buildQueryParams } from "@/lib/api/query-utils";
 
 export const reportsApi = {
   summary: () => unwrapResponse(apiClient.get<ApiResponse<DashboardSummary>>(endpoints.reports.summary)),
+  weeklyPrincipalSummary: () =>
+    unwrapResponse(apiClient.post<ApiResponse<WeeklyPrincipalSummary>>(endpoints.reports.weeklyPrincipalSummary, {})),
   totalStudents: () => unwrapResponse(apiClient.get<ApiResponse<{ totalStudents: number }>>(endpoints.reports.totalStudents)),
   activeStudents: () => unwrapResponse(apiClient.get<ApiResponse<{ activeStudents: number }>>(endpoints.reports.activeStudents)),
   enrollmentTrend: () =>

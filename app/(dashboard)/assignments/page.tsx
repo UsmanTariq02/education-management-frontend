@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { BookOpenCheck, ClipboardList, Clock3, FileCheck2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -32,6 +33,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePermission } from "@/hooks/use-permission";
 import { normalizeApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/formatters";
+import { exportRowsToCsv } from "@/lib/utils/export";
 import { useAuth } from "@/providers/auth-provider";
 import type { Assignment, AssignmentSubmission } from "@/types/domain";
 
@@ -43,12 +45,14 @@ export default function AssignmentsPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [open, setOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [reviewDrafts, setReviewDrafts] = useState<ReviewDraftState>({});
   const canCreate = usePermission("assignments.create");
   const canManage = usePermission("assignments.update");
+  const canDelete = usePermission("assignments.delete");
 
   const query = useQuery({
     queryKey: ["assignments", debouncedSearch, pageIndex],
@@ -224,6 +228,47 @@ export default function AssignmentsPage() {
     [canManage, form],
   );
 
+  const selectedAssignmentIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedAssignmentExportRows = useMemo(
+    () =>
+      items
+        .filter((assignment) => selectedAssignmentIds.includes(assignment.id))
+        .map((assignment) => ({
+          Assignment: assignment.title,
+          Code: assignment.code,
+          Batch: assignment.batchName,
+          Subject: assignment.subjectName,
+          Teacher: assignment.teacherName ?? "Unassigned",
+          DueAt: formatDate(assignment.dueAt),
+          Status: assignment.status,
+          Submissions: assignment.submissionCount,
+          Reviewed: assignment.reviewedCount,
+        })),
+    [items, selectedAssignmentIds],
+  );
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => assignmentsApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected assignments deleted");
+      queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
   function getDraft(submission: AssignmentSubmission) {
     return reviewDrafts[submission.id] ?? {
       feedback: submission.feedback ?? "",
@@ -249,6 +294,17 @@ export default function AssignmentsPage() {
         <MetricCard title="Due soon" value={String(stats.dueSoon)} helper="Assignments closing in the next 72 hours" icon={Clock3} tone="amber" />
         <MetricCard title="Reviewed submissions" value={String(stats.reviewed)} helper="Submission records already finalized by teachers" icon={FileCheck2} tone="violet" />
       </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ module: "assignments" })}>Audit assignment events</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Audit bulk deletes</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "create" })}>Audit assignment creation</Link>
+        </Button>
+      </div>
       <FilterBar
         search={search}
         onSearchChange={(value) => {
@@ -270,9 +326,9 @@ export default function AssignmentsPage() {
                   <DialogDescription>Assignments are long-form coursework items with student submissions and teacher review.</DialogDescription>
                 </DialogHeader>
                 <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-                  <FormField label="Academic session" className="md:col-span-2">
+                  <FormField label="Academic year / term" className="md:col-span-2">
                     <NativeSelect {...form.register("academicSessionId")}>
-                      <option value="">General / all sessions</option>
+                      <option value="">General / all periods</option>
                       {sessionsQuery.data?.items.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.name}
@@ -352,12 +408,43 @@ export default function AssignmentsPage() {
           ) : null
         }
       />
+      {selectedAssignmentIds.length > 0 && (canManage || canDelete) ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedAssignmentIds.length} assignment{selectedAssignmentIds.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "assignments-selected", rows: selectedAssignmentExportRows })}
+              disabled={selectedAssignmentExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            {canDelete ? (
+              <Button
+                variant="destructive"
+                onClick={() => bulkDeleteMutation.mutate(selectedAssignmentIds)}
+                disabled={bulkDeleteMutation.isPending}
+              >
+                {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <DataTable
         data={items}
         columns={columns}
         pageCount={Math.ceil(query.data.total / query.data.limit)}
         pagination={{ pageIndex, pageSize: query.data.limit }}
         onPaginationChange={(state) => setPageIndex(state.pageIndex)}
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
       <Dialog open={Boolean(selectedAssignment)} onOpenChange={(nextOpen) => !nextOpen && setSelectedAssignment(null)}>
         <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
@@ -368,19 +455,19 @@ export default function AssignmentsPage() {
           {selectedAssignment ? (
             <div className="space-y-4 text-sm">
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border px-4 py-3">
+                <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 shadow-sm">
                   <p className="text-muted-foreground">Assignment</p>
                   <p className="mt-1 font-medium">{selectedAssignment.title}</p>
                   <p className="text-xs text-muted-foreground">{selectedAssignment.subjectName} · {selectedAssignment.batchName}</p>
                 </div>
-                <div className="rounded-2xl border px-4 py-3">
+                <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 shadow-sm">
                   <p className="text-muted-foreground">Status</p>
                   <p className="mt-1 font-medium">
                     {selectedAssignment.status} · Due {formatDate(selectedAssignment.dueAt)}
                   </p>
                 </div>
               </div>
-              <div className="rounded-2xl border px-4 py-3">
+              <div className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 shadow-sm">
                 <p className="font-medium">Instructions</p>
                 <p className="mt-1 text-muted-foreground">{selectedAssignment.instructions ?? selectedAssignment.description ?? "No instructions provided."}</p>
               </div>
@@ -395,7 +482,7 @@ export default function AssignmentsPage() {
                   selectedAssignment.submissions.map((submission) => {
                     const draft = getDraft(submission);
                     return (
-                      <div key={submission.id} className="rounded-2xl border p-4">
+                      <div key={submission.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="font-medium">{submission.studentName}</p>
@@ -463,7 +550,7 @@ export default function AssignmentsPage() {
                     );
                   })
                 ) : (
-                  <div className="rounded-2xl border border-dashed px-4 py-6 text-muted-foreground">No student submissions yet.</div>
+                  <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-muted-foreground">No student submissions yet.</div>
                 )}
               </div>
             </div>

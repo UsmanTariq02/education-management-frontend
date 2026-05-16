@@ -1,6 +1,15 @@
 import type { AuthUser, OrganizationModule } from "@/types/auth";
+import { ONLINE_CLASSES_ENABLED } from "@/lib/constants/features";
+
+function isOnlineClassesPermission(permission: string) {
+  return permission.startsWith("online-classes.");
+}
 
 export function hasPermission(user: AuthUser | null, permission: string) {
+  if (isOnlineClassesPermission(permission) && !ONLINE_CLASSES_ENABLED) {
+    return false;
+  }
+
   return Boolean(user?.permissions.includes(permission) || user?.roles.includes("SUPER_ADMIN"));
 }
 

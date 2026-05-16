@@ -1,15 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Banknote, Coins, Receipt } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useForm } from "react-hook-form";
 import { CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Bar, BarChart } from "recharts";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { aiApi } from "@/features/ai/api/ai-api";
 import { feesApi } from "@/features/fees/api/fees-api";
+import { remindersApi } from "@/features/reminders/api/reminders-api";
 import { studentsApi } from "@/features/students/api/students-api";
 import { feeRecordSchema, type FeeRecordSchema } from "@/features/fees/schemas/fee-record-schema";
 import { normalizeApiError } from "@/lib/api/errors";
@@ -23,8 +26,10 @@ import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/form-field";
 import { formatCurrency, formatDate } from "@/lib/formatters";
@@ -34,6 +39,61 @@ import { OrganizationScopeBanner } from "@/components/shared/organization-scope-
 import { useAuth } from "@/providers/auth-provider";
 import { MetricCard } from "@/components/cards/metric-card";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useSavedFilterPresets } from "@/hooks/use-saved-filter-presets";
+import { exportRowsToCsv } from "@/lib/utils/export";
+import { hasAiAccess } from "@/lib/ai/access";
+import type { AiFeeCollectionPlan, FeeEscalationAutomationSummary } from "@/types/domain";
+
+function buildFeeRecommendationContext({
+  selectedRecord,
+  filteredRecords,
+  studentMap,
+  feeStats,
+}: {
+  selectedRecord: FeeRecord | null;
+  filteredRecords: FeeRecord[];
+  studentMap: Map<string, { fullName: string; guardianName: string; phone: string }>;
+  feeStats: {
+    totalRecords: number;
+    collected: number;
+    outstanding: number;
+    unpaidCount: number;
+  };
+}) {
+  const focusRecord = selectedRecord ?? filteredRecords.find((record) => record.status === "OVERDUE" || record.status === "PENDING") ?? filteredRecords[0] ?? null;
+  const overdueRecords = filteredRecords.filter((record) => record.status === "OVERDUE");
+  const unpaidRecords = filteredRecords.filter((record) => record.status === "PENDING" || record.status === "OVERDUE");
+
+  const focusStudent = focusRecord ? studentMap.get(focusRecord.studentId) : null;
+
+  return [
+    `Ledger summary: ${feeStats.totalRecords} records, collected ${formatCurrency(feeStats.collected)}, outstanding ${formatCurrency(feeStats.outstanding)}, unpaid records ${feeStats.unpaidCount}`,
+    `Focus record: ${focusRecord ? `${focusStudent?.fullName ?? "Unknown student"} ${focusRecord.month}/${focusRecord.year} status ${focusRecord.status} due ${formatCurrency(focusRecord.amountDue)} paid ${formatCurrency(focusRecord.amountPaid)}` : "None"}`,
+    `Overdue records: ${overdueRecords.length}`,
+    `Unpaid records: ${unpaidRecords.length}`,
+    focusRecord
+      ? `Guardian contact: ${focusStudent?.guardianName ?? "Unknown guardian"} · ${focusStudent?.phone ?? "No phone"}`
+      : null,
+    filteredRecords
+      .slice(0, 8)
+      .map((record) => {
+        const student = studentMap.get(record.studentId);
+        return `${student?.fullName ?? "Unknown student"} | ${record.month}/${record.year} | ${record.status} | due ${formatCurrency(record.amountDue)} | paid ${formatCurrency(record.amountPaid)} | ${record.paymentMethod ?? "No payment method"}`;
+      })
+      .join("\n"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-3 shadow-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
+  );
+}
 
 export default function FeesPage() {
   const { user } = useAuth();
@@ -43,15 +103,23 @@ export default function FeesPage() {
   const [search, setSearch] = useState(initialSearch);
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
+  const [selectedPresetId, setSelectedPresetId] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const pageSize = 12;
   const [recordOpen, setRecordOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<FeeRecord | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<FeeRecord | null>(null);
+  const [feeCollectionPlan, setFeeCollectionPlan] = useState<AiFeeCollectionPlan | null>(null);
   const canCreate = usePermission("fees.create");
   const canManage = usePermission("fees.update");
   const canMutateWithinScope = Boolean(user?.organizationId);
+  const aiReady = hasAiAccess(user);
   const queryClient = useQueryClient();
+  const savedFeeFilterPresets = useSavedFilterPresets<{
+    search: string;
+    statusFilter: string;
+  }>("fees-filter-presets");
   const recordsQuery = useQuery({
     queryKey: ["fees", "records", debouncedSearch, pageIndex, pageSize],
     queryFn: () => feesApi.listRecords({ page: pageIndex + 1, limit: pageSize, search: debouncedSearch }),
@@ -74,6 +142,7 @@ export default function FeesPage() {
   useEffect(() => {
     setSearch(searchParams?.get("search") ?? "");
     setStatusFilter(searchParams?.get("status") ?? "ALL");
+    setSelectedPresetId("");
     setPageIndex(0);
   }, [searchParams]);
 
@@ -107,6 +176,16 @@ export default function FeesPage() {
       setRecordOpen(false);
       setEditingRecord(null);
       form.reset();
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => feesApi.bulkRemoveRecords(ids),
+    onSuccess: () => {
+      toast.success("Selected fee records deleted");
+      queryClient.invalidateQueries({ queryKey: ["fees"] });
+      setRowSelection({});
     },
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
@@ -237,6 +316,20 @@ export default function FeesPage() {
     });
     return Array.from(counts.entries()).map(([month, total]) => ({ month, total }));
   }, [filteredRecords]);
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
+
+  const selectedRecordIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
 
   const exportRows = useMemo(
     () =>
@@ -251,6 +344,21 @@ export default function FeesPage() {
       })),
     [filteredRecords, studentMap],
   );
+  const selectedRecordExportRows = useMemo(
+    () =>
+      filteredRecords
+        .filter((record) => selectedRecordIds.includes(record.id))
+        .map((record) => ({
+          Student: studentMap.get(record.studentId)?.fullName ?? "Unknown student",
+          Status: record.status,
+          BillingCycle: `${record.month}/${record.year}`,
+          AmountDue: formatCurrency(record.amountDue),
+          AmountPaid: formatCurrency(record.amountPaid),
+          PaymentMethod: record.paymentMethod ?? "",
+          PaidAt: formatDate(record.paidAt),
+        })),
+    [filteredRecords, selectedRecordIds, studentMap],
+  );
 
   const feeStats = useMemo(() => {
     return {
@@ -260,6 +368,86 @@ export default function FeesPage() {
       unpaidCount: filteredRecords.filter((item) => item.status === "PENDING" || item.status === "OVERDUE").length,
     };
   }, [filteredRecords]);
+
+  const feeRecommendationContext = useMemo(
+    () =>
+      buildFeeRecommendationContext({
+        selectedRecord,
+        filteredRecords,
+        studentMap,
+        feeStats,
+      }),
+    [feeStats, filteredRecords, selectedRecord, studentMap],
+  );
+
+  const feeCollectionMutation = useMutation({
+    mutationFn: async () =>
+      aiApi.generateFeeCollectionPlan({
+        studentName:
+          selectedRecord ? studentMap.get(selectedRecord.studentId)?.fullName ?? "Selected student" : "Current fee ledger",
+        context: feeRecommendationContext,
+      }),
+    onSuccess: (data) => {
+      setFeeCollectionPlan(data);
+      toast.success("Fee collection plan generated");
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const feeReminderMutation = useMutation({
+    mutationFn: async () => {
+      const targetRecords = filteredRecords.filter(
+        (record) =>
+          selectedRecordIds.includes(record.id) && (record.status === "PENDING" || record.status === "OVERDUE" || record.status === "PARTIAL"),
+      );
+
+      if (targetRecords.length === 0) {
+        throw new Error("Select at least one pending, partial, or overdue fee record");
+      }
+
+      const messageTemplate = feeCollectionPlan?.parentMessageDraft?.trim();
+
+      const results = await Promise.all(
+        targetRecords.map((record) => {
+          const student = studentMap.get(record.studentId);
+          const amountDue = formatCurrency(record.amountDue);
+          const amountPaid = formatCurrency(record.amountPaid);
+          const balance = formatCurrency(Math.max(Number(record.amountDue) - Number(record.amountPaid), 0));
+          const message =
+            messageTemplate ??
+            `Fee follow-up for ${student?.fullName ?? "the student"} for ${record.month}/${record.year}.\n\nStatus: ${record.status}\nAmount due: ${amountDue}\nAmount paid: ${amountPaid}\nPending balance: ${balance}\n\nPlease review the payment with the school office.`;
+
+          return remindersApi.create({
+            studentId: record.studentId,
+            channel: "MANUAL",
+            message,
+            status: "SENT",
+          });
+        }),
+      );
+
+      return results.length;
+    },
+    onSuccess: (createdCount) => {
+      toast.success(`Created ${createdCount} fee reminder${createdCount === 1 ? "" : "s"}`);
+      queryClient.invalidateQueries({ queryKey: ["reminders"] });
+      queryClient.invalidateQueries({ queryKey: ["fees"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const feeEscalationMutation = useMutation({
+    mutationFn: async () => feesApi.processEscalations(),
+    onSuccess: (summary: FeeEscalationAutomationSummary) => {
+      toast.success(
+        `Processed ${summary.processedOrganizations} organization${summary.processedOrganizations === 1 ? "" : "s"} and created ${summary.remindersCreated} fee escalation reminder${summary.remindersCreated === 1 ? "" : "s"}.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["reminders"] });
+      queryClient.invalidateQueries({ queryKey: ["fees"] });
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
 
   if (recordsQuery.isLoading || (shouldLoadReferenceData && (plansQuery.isLoading || studentsQuery.isLoading))) return <LoadingState rows={6} />;
   if (
@@ -284,6 +472,96 @@ export default function FeesPage() {
         <MetricCard title="Collected" value={formatCurrency(feeStats.collected)} helper="Amount paid across listed records" icon={Banknote} tone="emerald" />
         <MetricCard title="Outstanding" value={formatCurrency(feeStats.outstanding)} helper="Remaining balance across listed records" icon={Coins} tone="amber" />
         <MetricCard title="Unpaid records" value={String(feeStats.unpaidCount)} helper="Pending or overdue fee records" icon={AlertCircle} tone="rose" />
+      </div>
+      <Card className="border-border/70 bg-card/85 shadow-sm backdrop-blur">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-xl">AI collection assistant</CardTitle>
+              <CardDescription>Turn the current fee context into a collection strategy, parent message draft, and follow-up actions.</CardDescription>
+            </div>
+            <Button onClick={() => feeCollectionMutation.mutate()} disabled={feeCollectionMutation.isPending || !aiReady}>
+              {feeCollectionMutation.isPending ? "Generating..." : "Generate collection plan"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!aiReady ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              AI access is not enabled for this account. Add a tenant key or use the trial AI window to enable fee collection guidance.
+            </div>
+          ) : null}
+          {feeCollectionPlan ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3">
+                <SummaryRow label="Risk level" value={feeCollectionPlan.riskLevel} />
+                <SummaryRow label="Confidence" value={`${Math.round(feeCollectionPlan.confidence * 100)}%`} />
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Overview</p>
+                  <p className="mt-2 text-sm text-foreground">{feeCollectionPlan.overview}</p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Key signals</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {feeCollectionPlan.keySignals.map((signal) => (
+                      <Badge key={signal} variant="outline">
+                        {signal}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="rounded-2xl border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Collection strategy</p>
+                  <p className="mt-2 text-sm text-foreground">{feeCollectionPlan.collectionStrategy}</p>
+                </div>
+                <div className="rounded-2xl border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recommended actions</p>
+                  <div className="mt-3 space-y-2">
+                    {feeCollectionPlan.recommendedActions.map((action) => (
+                      <p key={action} className="rounded-2xl border border-border/70 bg-background px-3 py-2 text-sm shadow-sm">
+                        {action}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Parent message draft</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{feeCollectionPlan.parentMessageDraft}</p>
+                </div>
+                <div className="rounded-2xl border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Internal note</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{feeCollectionPlan.internalNote}</p>
+                  <Badge className="mt-3" variant={feeCollectionPlan.escalationNeeded ? "warning" : "success"}>
+                    {feeCollectionPlan.escalationNeeded ? "Escalation recommended" : "No escalation required"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Generate a collection plan using the current filter set or the selected record to see a suggested outreach path.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={() => feeEscalationMutation.mutate()} disabled={feeEscalationMutation.isPending}>
+          {feeEscalationMutation.isPending ? "Running escalations..." : "Run fee escalations"}
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ module: "fees" })}>Audit fee activity</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "create-record" })}>Audit record creation</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "delete-record" })}>Audit record deletions</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete-records" })}>Audit bulk deletes</Link>
+        </Button>
       </div>
       <div className="grid gap-6 xl:grid-cols-2">
         <ChartCard title="Paid vs unpaid distribution">
@@ -322,6 +600,7 @@ export default function FeesPage() {
         search={search}
         onSearchChange={(value) => {
           setSearch(value);
+          setSelectedPresetId("");
           setPageIndex(0);
         }}
         searchPlaceholder="Search fee records by student or billing cycle..."
@@ -330,6 +609,7 @@ export default function FeesPage() {
             value={statusFilter}
             onChange={(event) => {
               setStatusFilter(event.target.value);
+              setSelectedPresetId("");
               setPageIndex(0);
             }}
           >
@@ -400,6 +680,109 @@ export default function FeesPage() {
           ) : null
         }
       />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 px-4 py-3 text-sm shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Saved views</span>
+          <Select
+            value={selectedPresetId}
+            onValueChange={(presetId) => {
+              const preset = savedFeeFilterPresets.presets.find((item) => item.id === presetId);
+              if (!preset) {
+                return;
+              }
+
+              setSearch(preset.value.search);
+              setStatusFilter(preset.value.statusFilter);
+              setSelectedPresetId(preset.id);
+              setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select saved view" />
+            </SelectTrigger>
+            <SelectContent>
+              {savedFeeFilterPresets.presets.length === 0 ? (
+                <SelectItem value="__none" disabled>
+                  No saved views yet
+                </SelectItem>
+              ) : (
+                savedFeeFilterPresets.presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const name = window.prompt("Save the current fee filters as:");
+              const preset = name
+                ? savedFeeFilterPresets.savePreset(name, {
+                    search,
+                    statusFilter,
+                  })
+                : null;
+
+              if (preset) {
+                setSelectedPresetId(preset.id);
+                toast.success(`Saved view "${preset.name}"`);
+              }
+            }}
+          >
+            Save current view
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              savedFeeFilterPresets.clearPresets();
+              setSelectedPresetId("");
+              toast.success("Saved fee views cleared");
+            }}
+            disabled={savedFeeFilterPresets.presets.length === 0}
+          >
+            Clear saved views
+          </Button>
+        </div>
+      </div>
+
+      {selectedRecordIds.length > 0 && canManage ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedRecordIds.length} fee record{selectedRecordIds.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "fee-records-selected", rows: selectedRecordExportRows })}
+              disabled={selectedRecordExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => bulkDeleteMutation.mutate(selectedRecordIds)}
+              disabled={bulkDeleteMutation.isPending || feeReminderMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => feeReminderMutation.mutate()}
+              disabled={feeReminderMutation.isPending || bulkDeleteMutation.isPending}
+            >
+              {feeReminderMutation.isPending ? "Creating..." : "Create fee reminders"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <DataTable
         data={filteredRecords}
         columns={columns}
@@ -410,6 +793,9 @@ export default function FeesPage() {
             setPageIndex(state.pageIndex);
           }
         }}
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
       <Dialog open={Boolean(selectedRecord)} onOpenChange={(nextOpen) => !nextOpen && setSelectedRecord(null)}>
         <DialogContent>

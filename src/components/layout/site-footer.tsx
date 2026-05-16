@@ -24,6 +24,9 @@ export function SiteFooter({ variant = "public" }: SiteFooterProps) {
           <div className="space-y-3">
             <p className={isDashboard ? "text-sm font-semibold text-foreground" : "text-sm font-semibold text-white"}>Platform</p>
             <div className={isDashboard ? "space-y-2 text-sm text-muted-foreground" : "space-y-2 text-sm text-slate-300"}>
+              <Link href="/why-eduflow" className="block hover:text-primary">
+                Why EduFlow
+              </Link>
               <Link href="/about" className="block hover:text-primary">
                 About
               </Link>

@@ -2,7 +2,7 @@ import { apiClient, unwrapResponse } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import { buildQueryParams } from "@/lib/api/query-utils";
 import type { ApiResponse, PaginatedResult, PaginationParams } from "@/types/api";
-import type { CreateExamDto, UpdateExamDto } from "@/types/dto";
+import type { BulkDeleteDto, CreateExamDto, UpdateExamDto } from "@/types/dto";
 import type { Exam } from "@/types/domain";
 
 export const examsApi = {
@@ -14,4 +14,8 @@ export const examsApi = {
     unwrapResponse(apiClient.patch<ApiResponse<Exam>>(endpoints.exams.detail(id), payload)),
   remove: (id: string) =>
     unwrapResponse(apiClient.delete<ApiResponse<{ deleted: boolean }>>(endpoints.exams.detail(id))),
+  bulkRemove: (ids: string[]) =>
+    unwrapResponse(apiClient.post<ApiResponse<{ deletedCount: number }>>(endpoints.exams.bulkDelete, { ids } satisfies BulkDeleteDto)),
+  bulkUpdatePublishState: (ids: string[], isPublished: boolean) =>
+    unwrapResponse(apiClient.post<ApiResponse<{ updatedCount: number }>>(endpoints.exams.bulkPublish, { ids, isPublished })),
 };

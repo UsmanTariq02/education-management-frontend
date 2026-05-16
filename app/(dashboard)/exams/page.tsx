@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BookCopy, CalendarClock, NotebookPen, Trophy } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { academicSessionsApi } from "@/features/academic-sessions/api/academic-sessions-api";
 import { batchesApi } from "@/features/batches/api/batches-api";
@@ -29,24 +30,32 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useSavedFilterPresets } from "@/hooks/use-saved-filter-presets";
 import { usePermission } from "@/hooks/use-permission";
 import { formatDate } from "@/lib/formatters";
 import { getChartColor } from "@/lib/constants/chart-colors";
 import { normalizeApiError } from "@/lib/api/errors";
 import { useAuth } from "@/providers/auth-provider";
+import { exportRowsToCsv } from "@/lib/utils/export";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Exam } from "@/types/domain";
 
 export default function ExamsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [selectedPresetId, setSelectedPresetId] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [open, setOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const canCreate = usePermission("exams.create");
   const canManage = usePermission("exams.update");
+  const savedExamFilterPresets = useSavedFilterPresets<{
+    search: string;
+  }>("exams-filter-presets");
 
   const examsQuery = useQuery({
     queryKey: ["exams", debouncedSearch, pageIndex],
@@ -96,6 +105,27 @@ export default function ExamsPage() {
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => examsApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected exams deleted");
+      queryClient.invalidateQueries({ queryKey: ["exams"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkPublishMutation = useMutation({
+    mutationFn: async (payload: { ids: string[]; isPublished: boolean }) =>
+      examsApi.bulkUpdatePublishState(payload.ids, payload.isPublished),
+    onSuccess: (_, variables) => {
+      toast.success(variables.isPublished ? "Selected exams published" : "Selected exams moved back to draft");
+      queryClient.invalidateQueries({ queryKey: ["exams"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
   const exams = examsQuery.data?.items ?? [];
   const stats = useMemo(
     () => ({
@@ -119,6 +149,34 @@ export default function ExamsPage() {
     { name: "Published", value: stats.published },
     { name: "Draft", value: Math.max(stats.total - stats.published, 0) },
   ];
+  const selectedExamIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedExamExportRows = useMemo(
+    () =>
+      exams
+        .filter((exam) => selectedExamIds.includes(exam.id))
+        .map((exam) => ({
+          Exam: exam.name,
+          Code: exam.code,
+          Batch: exam.batchName,
+          Session: exam.academicSessionName ?? "General",
+          Date: formatDate(exam.examDate),
+          Subjects: exam.subjects.length,
+          Status: exam.isPublished ? "Published" : "Draft",
+        })),
+    [exams, selectedExamIds],
+  );
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
 
   const columns = useMemo<Array<ColumnDef<Exam>>>(
     () => [
@@ -133,7 +191,7 @@ export default function ExamsPage() {
         ),
       },
       { accessorKey: "batchName", header: "Batch" },
-      { accessorKey: "academicSessionName", header: "Session", cell: ({ row }) => row.original.academicSessionName ?? "General" },
+      { accessorKey: "academicSessionName", header: "Period", cell: ({ row }) => row.original.academicSessionName ?? "General" },
       { accessorKey: "examDate", header: "Date", cell: ({ row }) => formatDate(row.original.examDate) },
       {
         accessorKey: "subjects",
@@ -209,8 +267,120 @@ export default function ExamsPage() {
         <MetricCard title="Exam dates" value={String(stats.scheduled)} helper="Distinct dates currently scheduled" icon={CalendarClock} tone="violet" />
         <MetricCard title="Subject papers" value={String(stats.subjects)} helper="Total subject papers across visible exams" icon={BookCopy} tone="amber" />
       </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ module: "exams" })}>Audit exam events</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-publish" })}>Audit bulk publish</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Audit bulk deletes</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "create" })}>Audit exam creation</Link>
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 px-4 py-3 text-sm shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Saved views</span>
+          <Select
+            value={selectedPresetId}
+            onValueChange={(presetId) => {
+              const preset = savedExamFilterPresets.presets.find((item) => item.id === presetId);
+              if (!preset) return;
+              setSearch(preset.value.search);
+              setSelectedPresetId(preset.id);
+              setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select saved view" />
+            </SelectTrigger>
+            <SelectContent>
+              {savedExamFilterPresets.presets.length === 0 ? (
+                <SelectItem value="__none" disabled>
+                  No saved views yet
+                </SelectItem>
+              ) : (
+                savedExamFilterPresets.presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const name = window.prompt("Save the current exam search as:");
+              const preset = name ? savedExamFilterPresets.savePreset(name, { search }) : null;
+              if (preset) {
+                setSelectedPresetId(preset.id);
+                toast.success(`Saved view "${preset.name}"`);
+              }
+            }}
+          >
+            Save current view
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              savedExamFilterPresets.clearPresets();
+              setSelectedPresetId("");
+              toast.success("Saved exam views cleared");
+            }}
+            disabled={savedExamFilterPresets.presets.length === 0}
+          >
+            Clear saved views
+          </Button>
+        </div>
+      </div>
+      {selectedExamIds.length > 0 && canManage ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedExamIds.length} exam{selectedExamIds.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "exams-selected", rows: selectedExamExportRows })}
+              disabled={selectedExamExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => bulkPublishMutation.mutate({ ids: selectedExamIds, isPublished: true })}
+              disabled={bulkPublishMutation.isPending || bulkDeleteMutation.isPending}
+            >
+              Publish selected
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => bulkPublishMutation.mutate({ ids: selectedExamIds, isPublished: false })}
+              disabled={bulkPublishMutation.isPending || bulkDeleteMutation.isPending}
+            >
+              Unpublish selected
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => bulkDeleteMutation.mutate(selectedExamIds)}
+              disabled={bulkDeleteMutation.isPending || bulkPublishMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-2xl border bg-card p-4">
+        <div className="rounded-2xl border border-border/70 bg-card/85 p-4 shadow-sm backdrop-blur">
           <p className="mb-4 text-sm font-medium">Exams By Batch</p>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -228,7 +398,7 @@ export default function ExamsPage() {
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="rounded-2xl border bg-card p-4">
+        <div className="rounded-2xl border border-border/70 bg-card/85 p-4 shadow-sm backdrop-blur">
           <p className="mb-4 text-sm font-medium">Exam Publication Mix</p>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -273,7 +443,7 @@ export default function ExamsPage() {
                       <Input {...form.register("code")} />
                     </FormField>
                     <FormField label="Batch" required error={form.formState.errors.batchId}>
-                      <select className="h-10 rounded-xl border bg-background px-3 text-sm" {...form.register("batchId")}>
+                      <select className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("batchId")}>
                         <option value="">Select batch</option>
                         {batchesQuery.data?.items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                       </select>
@@ -281,14 +451,14 @@ export default function ExamsPage() {
                     <FormField label="Exam date" required error={form.formState.errors.examDate}>
                       <Input type="date" {...form.register("examDate")} />
                     </FormField>
-                    <FormField label="Academic session">
-                      <select className="h-10 rounded-xl border bg-background px-3 text-sm" {...form.register("academicSessionId")}>
-                        <option value="">General</option>
+                    <FormField label="Academic year / term">
+                      <select className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("academicSessionId")}>
+                        <option value="">General / all periods</option>
                         {sessionsQuery.data?.items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                       </select>
                     </FormField>
                     <FormField label="Teacher">
-                      <select className="h-10 rounded-xl border bg-background px-3 text-sm" {...form.register("teacherId")}>
+                      <select className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("teacherId")}>
                         <option value="">Unassigned</option>
                         {teachersQuery.data?.items.map((item) => <option key={item.id} value={item.id}>{item.fullName}</option>)}
                       </select>
@@ -297,7 +467,7 @@ export default function ExamsPage() {
                       <Input {...form.register("description")} />
                     </FormField>
                   </div>
-                  <div className="space-y-3 rounded-2xl border p-4">
+                  <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium">Exam subjects</p>
                       <Button type="button" variant="outline" size="sm" onClick={() => subjectFields.append({ subjectId: "", totalMarks: 100, passMarks: 40 })}>
@@ -306,12 +476,12 @@ export default function ExamsPage() {
                     </div>
                     {subjectFields.fields.map((field, index) => (
                       <div key={field.id} className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_auto]">
-                        <select className="h-10 rounded-xl border bg-background px-3 text-sm" {...form.register(`subjects.${index}.subjectId`)}>
+                        <select className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register(`subjects.${index}.subjectId`)}>
                           <option value="">Select subject</option>
                           {subjectsQuery.data?.items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                         </select>
-                        <input className="h-10 rounded-xl border bg-background px-3 text-sm" type="number" min={1} {...form.register(`subjects.${index}.totalMarks`)} />
-                        <input className="h-10 rounded-xl border bg-background px-3 text-sm" type="number" min={0} {...form.register(`subjects.${index}.passMarks`)} />
+                        <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" type="number" min={1} {...form.register(`subjects.${index}.totalMarks`)} />
+                        <input className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" type="number" min={0} {...form.register(`subjects.${index}.passMarks`)} />
                         <Button type="button" variant="ghost" onClick={() => subjectFields.remove(index)}>Remove</Button>
                       </div>
                     ))}
@@ -333,6 +503,9 @@ export default function ExamsPage() {
         pageCount={Math.ceil(examsQuery.data.total / examsQuery.data.limit)}
         pagination={{ pageIndex, pageSize: examsQuery.data.limit }}
         onPaginationChange={(state) => setPageIndex(state.pageIndex)}
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
       <Dialog open={Boolean(selectedExam)} onOpenChange={(nextOpen) => !nextOpen && setSelectedExam(null)}>
         <DialogContent className="max-w-3xl">
@@ -348,10 +521,10 @@ export default function ExamsPage() {
                 <DetailItem label="Session" value={selectedExam.academicSessionName ?? "General"} />
                 <DetailItem label="Date & status" value={`${formatDate(selectedExam.examDate)} · ${selectedExam.isPublished ? "Published" : "Draft"}`} />
               </div>
-              <div className="space-y-3 rounded-2xl border p-4">
+              <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                 <p className="text-sm font-medium">Subject papers</p>
                 {selectedExam.subjects.map((subject) => (
-                  <div key={subject.id} className="grid gap-3 rounded-xl border p-3 md:grid-cols-[1.6fr_0.8fr_0.8fr]">
+                  <div key={subject.id} className="grid gap-3 rounded-2xl border border-border/70 bg-background/70 p-3 shadow-sm md:grid-cols-[1.6fr_0.8fr_0.8fr]">
                     <div>
                       <p className="font-medium">{subject.subjectName}</p>
                       <p className="text-xs text-muted-foreground">{subject.subjectCode}</p>

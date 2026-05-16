@@ -58,7 +58,7 @@ export function PortalFeeCenter({ variant }: { variant: "student" | "parent" }) 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">
             {variant === "parent" ? "Parent fee action center" : "Student fee overview"}
           </p>
@@ -78,14 +78,14 @@ export function PortalFeeCenter({ variant }: { variant: "student" | "parent" }) 
         {query.data.map((item) => {
           const draft = drafts[item.id] ?? { title: "", notes: "", file: null };
           return (
-            <Card key={item.id} className="border-border/70">
+            <Card key={item.id} className="border-border/70 bg-card/85 shadow-sm backdrop-blur">
               <CardHeader className="space-y-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle>
+                  <div className="min-w-0">
+                    <CardTitle className="break-words">
                       {item.month}/{item.year}
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="break-words">
                       Due {formatCurrency(item.amountDue)} · Paid {formatCurrency(item.amountPaid)} · Pending {formatCurrency(item.pendingAmount)}
                     </CardDescription>
                   </div>
@@ -98,7 +98,7 @@ export function PortalFeeCenter({ variant }: { variant: "student" | "parent" }) 
                 </div>
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
-                {item.remarks ? <p className="text-muted-foreground">{item.remarks}</p> : null}
+                {item.remarks ? <p className="break-words text-muted-foreground">{item.remarks}</p> : null}
 
                 {variant === "parent" && item.pendingAmount > 0 ? (
                   <div className="space-y-3 rounded-2xl border border-dashed p-4">
@@ -147,9 +147,9 @@ export function PortalFeeCenter({ variant }: { variant: "student" | "parent" }) 
                     item.proofs.map((proof) => (
                       <div key={proof.id} className="rounded-2xl border p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="font-medium">{proof.title}</p>
-                            <p className="text-muted-foreground">
+                          <div className="min-w-0">
+                            <p className="break-words font-medium">{proof.title}</p>
+                            <p className="break-words text-muted-foreground">
                               {proof.originalName} · {formatDate(proof.submittedAt, "MMM d, yyyy p")}
                             </p>
                           </div>
@@ -157,8 +157,8 @@ export function PortalFeeCenter({ variant }: { variant: "student" | "parent" }) 
                             {proof.status}
                           </Badge>
                         </div>
-                        {proof.notes ? <p className="mt-2 text-muted-foreground">{proof.notes}</p> : null}
-                        {proof.rejectionReason ? <p className="mt-2 text-rose-600">{proof.rejectionReason}</p> : null}
+                        {proof.notes ? <p className="mt-2 break-words text-muted-foreground">{proof.notes}</p> : null}
+                        {proof.rejectionReason ? <p className="mt-2 break-words text-rose-600">{proof.rejectionReason}</p> : null}
                         <Button variant="outline" className="mt-3" onClick={() => handleDownload(proof.id, proof.originalName)}>
                           <Download className="mr-2 h-4 w-4" />
                           Download proof

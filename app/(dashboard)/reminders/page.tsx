@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { InputHTMLAttributes, ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useForm } from "react-hook-form";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Clock3, Mail, MessageCircleMore, PlayCircle, Settings2, Smartphone, BellRing, Send, AlertTriangle, Workflow } from "lucide-react";
 import { toast } from "sonner";
+import { aiApi } from "@/features/ai/api/ai-api";
 import { ChartCard } from "@/components/charts/chart-card";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
@@ -29,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { feesApi } from "@/features/fees/api/fees-api";
 import { remindersApi } from "@/features/reminders/api/reminders-api";
+import { organizationsApi } from "@/features/organizations/api/organizations-api";
 import {
   reminderProviderSettingSchema,
   reminderRuleSchema,
@@ -47,8 +50,16 @@ import { getReminderStatusBadgeVariant } from "@/lib/constants/status-colors";
 import { formatDate } from "@/lib/formatters";
 import { buildReminderMessage } from "@/lib/utils/message-templates";
 import { useAuth } from "@/providers/auth-provider";
-import type { ReminderAutomationTrigger, ReminderLog, ReminderRule, ReminderTemplate } from "@/types/domain";
+import {
+  createAiReviewItem,
+  latestReviewItem,
+  type AiReviewItem,
+  type AiReviewKind,
+} from "@/features/ai/utils/ai-review-queue";
+import type { AiNoticeDraft, AiReminderDraft, FeeRecord, ReminderAutomationTrigger, ReminderLog, ReminderRule, ReminderTemplate } from "@/types/domain";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { exportRowsToCsv } from "@/lib/utils/export";
+import { hasAiAccess } from "@/lib/ai/access";
 
 const automationTriggerOptions: Array<{ value: ReminderAutomationTrigger; label: string; description: string }> = [
   { value: "FEE_DUE", label: "Fee due", description: "Schedule reminders before or on the planned due date." },
@@ -73,6 +84,43 @@ const templatePlaceholderRows = [
   "{{year}}",
 ];
 
+function buildReminderDraftContext({
+  selectedStudentId,
+  selectedFeeRecordId,
+  selectedChannel,
+  selectedReminder,
+  studentMap,
+  feeRecordMap,
+  providerSettings,
+  noticeDraft,
+}: {
+  selectedStudentId?: string | null;
+  selectedFeeRecordId?: string | null;
+  selectedChannel: string | undefined;
+  selectedReminder: ReminderLog | null;
+  studentMap: Map<string, { fullName: string; guardianName: string; phone: string; guardianEmail: string | null }>;
+  feeRecordMap: Map<string, FeeRecord>;
+  providerSettings: { autoRemindersEnabled: boolean; emailEnabled: boolean; whatsappEnabled: boolean; smsEnabled: boolean; paymentConfirmationEnabled: boolean; senderName: string | null; replyToEmail: string | null } | null;
+  noticeDraft: AiNoticeDraft | null;
+}) {
+  const student = selectedStudentId ? studentMap.get(selectedStudentId) : null;
+  const feeRecord = selectedFeeRecordId ? feeRecordMap.get(selectedFeeRecordId) : null;
+  const feeRecordBalanceHint = feeRecord ? Math.max(Number(feeRecord.amountDue) - Number(feeRecord.amountPaid), 0) : null;
+
+  return [
+    `Selected student: ${student?.fullName ?? "None"}`,
+    `Selected channel: ${selectedChannel ?? "None"}`,
+    `Selected fee record: ${feeRecord ? `${feeRecord.month}/${feeRecord.year} status ${feeRecord.status} due ${feeRecord.amountDue} paid ${feeRecord.amountPaid}` : "None"}`,
+    selectedReminder ? `Selected reminder: ${selectedReminder.status} via ${selectedReminder.channel}` : null,
+    `Provider settings: automation ${providerSettings?.autoRemindersEnabled ? "enabled" : "disabled"}, email ${providerSettings?.emailEnabled ? "on" : "off"}, whatsapp ${providerSettings?.whatsappEnabled ? "on" : "off"}, sms ${providerSettings?.smsEnabled ? "on" : "off"}, confirmations ${providerSettings?.paymentConfirmationEnabled ? "on" : "off"}`,
+    noticeDraft ? `Latest notice draft subject: ${noticeDraft.subject}` : null,
+    student ? `Guardian: ${student.guardianName} · ${student.phone} · ${student.guardianEmail ?? "No guardian email"}` : null,
+    feeRecordBalanceHint !== null ? `Balance hint: ${feeRecordBalanceHint}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export default function RemindersPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -81,6 +129,7 @@ export default function RemindersPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [channelFilter, setChannelFilter] = useState("ALL");
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const pageSize = 12;
   const [logDialogOpen, setLogDialogOpen] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
@@ -89,10 +138,22 @@ export default function RemindersPage() {
   const [editingTemplate, setEditingTemplate] = useState<ReminderTemplate | null>(null);
   const [editingRule, setEditingRule] = useState<ReminderRule | null>(null);
   const [selectedReminder, setSelectedReminder] = useState<ReminderLog | null>(null);
+  const [noticeAudience, setNoticeAudience] = useState("Parents and students");
+  const [noticeTopic, setNoticeTopic] = useState("Upcoming school notice");
+  const [noticeTone, setNoticeTone] = useState("professional and concise");
+  const [noticePurpose, setNoticePurpose] = useState("Inform the school community about an important update.");
+  const [noticeCallToAction, setNoticeCallToAction] = useState("");
+  const [noticeKeyPoints, setNoticeKeyPoints] = useState("Important date\nWho is affected\nWhat action is needed");
+  const [noticeContext, setNoticeContext] = useState("");
+  const [noticeDraft, setNoticeDraft] = useState<AiNoticeDraft | null>(null);
+  const [reminderDraft, setReminderDraft] = useState<AiReminderDraft | null>(null);
+  const [approvalQueue, setApprovalQueue] = useState<AiReviewItem[]>([]);
+  const lastSyncedQueueRef = useRef<string>("");
   const canCreate = usePermission("reminders.create");
   const canManage = usePermission("reminders.update");
   const canManageSettings = usePermission("settings.update");
   const canMutateWithinScope = Boolean(user?.organizationId);
+  const aiReady = hasAiAccess(user);
 
   const remindersQuery = useQuery({
     queryKey: ["reminders", debouncedSearch, pageIndex, pageSize],
@@ -113,6 +174,11 @@ export default function RemindersPage() {
     queryFn: () => remindersApi.getProviderSettings(),
     enabled: canManageSettings && canMutateWithinScope,
   });
+  const currentSettingsQuery = useQuery({
+    queryKey: ["reminders-current-settings"],
+    queryFn: organizationsApi.currentSettings,
+    enabled: canMutateWithinScope,
+  });
   const shouldLoadReminderReferenceData =
     logDialogOpen ||
     Boolean(selectedReminder) ||
@@ -128,10 +194,52 @@ export default function RemindersPage() {
     queryFn: () => feesApi.listRecords({ page: 1, limit: 100 }),
     enabled: shouldLoadReminderReferenceData,
   });
+  const reviewQueueQuery = useQuery({
+    queryKey: ["ai-review-queue", user?.organizationId, user?.id, "reminders"],
+    queryFn: () => aiApi.reviewQueue(user?.organizationId ?? undefined),
+    enabled: Boolean(user?.organizationId),
+  });
 
   const studentMap = useMemo(() => new Map((studentsQuery.data?.items ?? []).map((student) => [student.id, student])), [studentsQuery.data]);
   const feeRecordMap = useMemo(() => new Map((feesQuery.data?.items ?? []).map((record) => [record.id, record])), [feesQuery.data]);
   const templateMap = useMemo(() => new Map((templatesQuery.data?.items ?? []).map((template) => [template.id, template])), [templatesQuery.data]);
+
+  useEffect(() => {
+    if (!reviewQueueQuery.data) {
+      return;
+    }
+
+    const serialized = JSON.stringify(reviewQueueQuery.data);
+    lastSyncedQueueRef.current = serialized;
+    setApprovalQueue(reviewQueueQuery.data);
+  }, [reviewQueueQuery.data]);
+
+  const saveReviewQueueMutation = useMutation({
+    mutationFn: async (items: AiReviewItem[]) => aiApi.saveReviewQueue({ items }, user?.organizationId ?? undefined),
+    onSuccess: (savedQueue) => {
+      const serialized = JSON.stringify(savedQueue);
+      lastSyncedQueueRef.current = serialized;
+      setApprovalQueue(savedQueue);
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  useEffect(() => {
+    if (!user?.organizationId || !reviewQueueQuery.isSuccess) {
+      return;
+    }
+
+    const serialized = JSON.stringify(approvalQueue);
+    if (serialized === lastSyncedQueueRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      saveReviewQueueMutation.mutate(approvalQueue);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [approvalQueue, reviewQueueQuery.isSuccess, saveReviewQueueMutation, user?.organizationId]);
 
   const manualForm = useForm<ReminderSchema>({
     resolver: zodResolver(reminderSchema),
@@ -181,6 +289,31 @@ export default function RemindersPage() {
   const selectedStudentId = manualForm.watch("studentId");
   const selectedChannel = manualForm.watch("channel");
   const selectedFeeRecordId = manualForm.watch("feeRecordId");
+  const reminderDraftContext = useMemo(
+    () =>
+      buildReminderDraftContext({
+        selectedStudentId,
+        selectedFeeRecordId,
+        selectedChannel,
+        selectedReminder,
+        studentMap,
+        feeRecordMap,
+        providerSettings: providerSettingsQuery.data ?? null,
+        noticeDraft,
+      }),
+    [feeRecordMap, noticeDraft, providerSettingsQuery.data, selectedChannel, selectedFeeRecordId, selectedReminder, selectedStudentId, studentMap],
+  );
+
+  const latestApprovedReminderDraft = useMemo(
+    () => latestReviewItem(approvalQueue, "REMINDER", "APPROVED"),
+    [approvalQueue],
+  );
+  const latestApprovedNoticeDraft = useMemo(() => latestReviewItem(approvalQueue, "NOTICE", "APPROVED"), [approvalQueue]);
+  const approvalRequired = Boolean(currentSettingsQuery.data?.aiDraftApprovalRequired);
+
+  const addToApprovalQueue = (kind: AiReviewKind, title: string, summary: string, body: string) => {
+    setApprovalQueue((current) => [...current, createAiReviewItem({ kind, title, summary, body })]);
+  };
 
   useEffect(() => {
     const currentMessage = manualForm.getValues("message");
@@ -300,11 +433,58 @@ export default function RemindersPage() {
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
 
+  const noticeMutation = useMutation({
+    mutationFn: () =>
+      aiApi.generateNotice({
+        audience: noticeAudience,
+        topic: noticeTopic,
+        tone: noticeTone,
+        purpose: noticePurpose,
+        callToAction: noticeCallToAction || undefined,
+        keyPoints: noticeKeyPoints
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean),
+        audienceContext: noticeContext || undefined,
+        organizationId: user?.organizationId ?? undefined,
+      }),
+    onSuccess: (draft) => {
+      setNoticeDraft(draft);
+      addToApprovalQueue("NOTICE", draft.subject, `${draft.audienceSummary} · ${draft.tone}`, draft.body);
+      toast.success("Notice draft generated");
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const reminderDraftMutation = useMutation({
+    mutationFn: async () =>
+      aiApi.generateReminderDraft({
+        audience: selectedStudentId && studentMap.get(selectedStudentId)?.guardianName ? "Guardians" : "School community",
+        context: reminderDraftContext,
+      }),
+    onSuccess: (data) => {
+      setReminderDraft(data);
+      addToApprovalQueue("REMINDER", data.subject, `${data.audienceSummary} · ${Math.round(data.confidence * 100)}% confidence`, data.body);
+      toast.success("Reminder draft generated");
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
   const processDueMutation = useMutation({
     mutationFn: () => remindersApi.processDue(),
     onSuccess: () => {
       toast.success("Due reminder schedules were processed");
       queryClient.invalidateQueries({ queryKey: ["reminders"] });
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => remindersApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected reminders deleted");
+      void queryClient.invalidateQueries({ queryKey: ["reminders"] });
+      setRowSelection({});
     },
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
@@ -356,6 +536,34 @@ export default function RemindersPage() {
         Message: record.message,
       })),
     [feeRecordMap, filteredReminderLogs, studentMap],
+  );
+
+  const selectedReminderIds = useMemo(
+    () =>
+      Object.entries(rowSelection)
+        .filter(([, isSelected]) => isSelected)
+        .map(([rowIndex]) => filteredReminderLogs[Number(rowIndex)]?.id)
+        .filter((id): id is string => Boolean(id)),
+    [filteredReminderLogs, rowSelection],
+  );
+  const selectedReminderExportRows = useMemo(
+    () =>
+      filteredReminderLogs
+        .filter((record) => selectedReminderIds.includes(record.id))
+        .map((record) => ({
+          Student: studentMap.get(record.studentId)?.fullName ?? "Unknown student",
+          Channel: record.channel,
+          Status: record.status,
+          FeeRecord:
+            record.feeRecordId && feeRecordMap.get(record.feeRecordId)
+              ? `${feeRecordMap.get(record.feeRecordId)?.month}/${feeRecordMap.get(record.feeRecordId)?.year}`
+              : "General",
+          SentAt: formatDate(record.sentAt),
+          DeliveryReference: record.deliveryReference ?? "",
+          FailureReason: record.failureReason ?? "",
+          Message: record.message,
+        })),
+    [feeRecordMap, filteredReminderLogs, selectedReminderIds, studentMap],
   );
 
   const columns = useMemo<Array<ColumnDef<ReminderLog>>>(
@@ -474,9 +682,23 @@ export default function RemindersPage() {
   const rules = rulesQuery.data?.items ?? [];
   const activeTemplates = templates.filter((template) => template.isActive).length;
   const activeRules = rules.filter((rule) => rule.isActive).length;
+  const billingTemplates = templates.filter((template) => template.code.toLowerCase().includes("fee"));
+  const feeDueRules = rules.filter((rule) => rule.trigger === "FEE_DUE");
+  const feeOverdueRules = rules.filter((rule) => rule.trigger === "FEE_OVERDUE");
+  const paymentConfirmationRules = rules.filter((rule) => rule.trigger === "PAYMENT_RECEIVED");
   const failedReminderCount = filteredReminderLogs.filter((record) => record.status === "FAILED").length;
   const sentReminderCount = filteredReminderLogs.filter((record) => record.status === "SENT").length;
   const totalReminders = filteredReminderLogs.length;
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
 
   return (
     <div className="space-y-6">
@@ -559,7 +781,7 @@ export default function RemindersPage() {
                     ) : (
                       <div className="space-y-2">
                         <p className="text-sm font-medium">Delivery status</p>
-                        <div className="flex h-10 items-center rounded-xl border bg-muted/40 px-3 text-sm text-muted-foreground">
+                        <div className="flex h-10 items-center rounded-2xl border border-border/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm">
                           Determined automatically by the backend delivery provider
                         </div>
                       </div>
@@ -590,6 +812,262 @@ export default function RemindersPage() {
         <MetricCard title="Failed reminders" value={String(failedReminderCount)} helper="Delivery failures needing review" icon={AlertTriangle} tone="rose" />
         <MetricCard title="Automation assets" value={String(activeTemplates + activeRules)} helper={`${activeTemplates} active templates and ${activeRules} active rules`} icon={Workflow} tone="violet" />
       </div>
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>AI notice generator</CardTitle>
+            <CardDescription>Generate a polished notice draft for parents, students, or staff and reuse it in your communication workflow.</CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const draftToUse = approvalRequired ? latestApprovedNoticeDraft : noticeDraft;
+                if (!draftToUse) {
+                  toast.message(approvalRequired ? "No approved notice draft available yet." : "Generate a notice draft first.");
+                  return;
+                }
+                manualForm.setValue("message", draftToUse.body);
+                setLogDialogOpen(true);
+                toast.success("Notice draft loaded into the reminder message form.");
+              }}
+              disabled={approvalRequired ? !latestApprovedNoticeDraft : !noticeDraft}
+            >
+              {approvalRequired ? "Use approved notice" : "Use notice draft"}
+            </Button>
+            <Button type="button" onClick={() => noticeMutation.mutate()} disabled={noticeMutation.isPending || !aiReady}>
+              {noticeMutation.isPending ? "Generating..." : "Generate notice"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Audience">
+              <Input value={noticeAudience} onChange={(event) => setNoticeAudience(event.target.value)} />
+            </FormField>
+            <FormField label="Topic">
+              <Input value={noticeTopic} onChange={(event) => setNoticeTopic(event.target.value)} />
+            </FormField>
+            <FormField label="Tone" className="md:col-span-2">
+              <Input value={noticeTone} onChange={(event) => setNoticeTone(event.target.value)} />
+            </FormField>
+            <FormField label="Purpose" className="md:col-span-2">
+              <Textarea rows={3} value={noticePurpose} onChange={(event) => setNoticePurpose(event.target.value)} />
+            </FormField>
+            <FormField label="Call to action" className="md:col-span-2">
+              <Input value={noticeCallToAction} onChange={(event) => setNoticeCallToAction(event.target.value)} placeholder="Read the notice and respond by Friday." />
+            </FormField>
+            <FormField label="Key points" className="md:col-span-2">
+              <Textarea rows={4} value={noticeKeyPoints} onChange={(event) => setNoticeKeyPoints(event.target.value)} />
+            </FormField>
+            <FormField label="Extra context" className="md:col-span-2">
+              <Textarea rows={4} value={noticeContext} onChange={(event) => setNoticeContext(event.target.value)} placeholder="School name, affected batches, dates, and any constraints." />
+            </FormField>
+          </div>
+          <div className="space-y-4 rounded-2xl border bg-muted/20 p-4">
+            {!aiReady ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 shadow-sm">
+                Add an OpenAI API key in organization settings to enable AI notice generation for this tenant.
+              </div>
+            ) : null}
+            {noticeDraft ? (
+              <>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Subject</p>
+                  <p className="font-medium">{noticeDraft.subject}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Title</p>
+                  <p className="font-medium">{noticeDraft.title}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Body</p>
+                  <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{noticeDraft.body}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Audience summary</p>
+                  <p className="text-sm text-muted-foreground">{noticeDraft.audienceSummary}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Call to action</p>
+                  <p className="text-sm text-muted-foreground">{noticeDraft.callToAction}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Key points</p>
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                    {noticeDraft.keyPoints.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Generate a notice draft to preview the structured output here.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      <Card className="border-slate-200/80">
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>AI reminder draft</CardTitle>
+            <CardDescription>Generate a reminder message from the selected student, fee record, and delivery context.</CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const draftToUse = approvalRequired ? latestApprovedReminderDraft : reminderDraft;
+                if (!draftToUse) {
+                  toast.message(approvalRequired ? "No approved reminder draft available yet." : "Generate a reminder draft first.");
+                  return;
+                }
+                manualForm.setValue("message", draftToUse.body);
+                setLogDialogOpen(true);
+                toast.success("Reminder draft loaded into the message form.");
+              }}
+              disabled={approvalRequired ? !latestApprovedReminderDraft : !reminderDraft}
+            >
+              {approvalRequired ? "Use approved reminder" : "Use reminder draft"}
+            </Button>
+            <Button type="button" onClick={() => reminderDraftMutation.mutate()} disabled={reminderDraftMutation.isPending || !aiReady}>
+              {reminderDraftMutation.isPending ? "Generating..." : "Generate reminder"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="space-y-4 rounded-2xl border bg-muted/20 p-4">
+            <FormField label="Audience">
+              <Input value={selectedStudentId && studentMap.get(selectedStudentId)?.guardianName ? "Guardians" : "School community"} readOnly />
+            </FormField>
+            <FormField label="Channel">
+              <Input value={selectedChannel} readOnly />
+            </FormField>
+            <FormField label="Reminder context">
+              <Textarea rows={5} value={reminderDraftContext} readOnly />
+            </FormField>
+            {!aiReady ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 shadow-sm">
+                Add an OpenAI API key in organization settings to enable AI reminder drafting for this tenant.
+              </div>
+            ) : null}
+          </div>
+          <div className="space-y-4 rounded-2xl border bg-muted/20 p-4">
+            {reminderDraft ? (
+              <>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Subject</p>
+                  <p className="font-medium">{reminderDraft.subject}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Body</p>
+                  <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{reminderDraft.body}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Audience summary</p>
+                  <p className="text-sm text-muted-foreground">{reminderDraft.audienceSummary}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Call to action</p>
+                  <p className="text-sm text-muted-foreground">{reminderDraft.callToAction}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Delivery tip</p>
+                  <p className="text-sm text-muted-foreground">{reminderDraft.deliveryTip}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Key points</p>
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                    {reminderDraft.keyPoints.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <Badge variant="outline">Confidence {Math.round(reminderDraft.confidence * 100)}%</Badge>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Generate a reminder draft from the current reminder context to preview the structured output here.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ module: "reminders" })}>Audit reminder events</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Audit bulk deletes</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "reset-defaults" })}>Audit template resets</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "process-due-schedules" })}>Audit automation runs</Link>
+        </Button>
+      </div>
+
+      <Card className="border-primary/10 bg-gradient-to-br from-primary/5 via-background to-background shadow-sm">
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>Billing automation</CardTitle>
+            <CardDescription>Keep fee reminders, overdue escalations, and payment confirmations moving without manual follow-up.</CardDescription>
+          </div>
+          <Badge variant={providerSettings?.autoRemindersEnabled ? "success" : "secondary"}>
+            {providerSettings?.autoRemindersEnabled ? "Running" : "Paused"}
+          </Badge>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            title="Due workflows"
+            value={String(feeDueRules.length)}
+            helper={`${billingTemplates.length} billing templates available`}
+            icon={Clock3}
+            tone="sky"
+          />
+          <MetricCard
+            title="Overdue workflows"
+            value={String(feeOverdueRules.length)}
+            helper="Escalations for fee records past their due date"
+            icon={AlertTriangle}
+            tone="rose"
+          />
+          <MetricCard
+            title="Payment confirmations"
+            value={String(paymentConfirmationRules.length)}
+            helper="Rules that fire when a fee is marked paid"
+            icon={Send}
+            tone="emerald"
+          />
+          <MetricCard
+            title="Provider status"
+            value={providerSettings?.emailEnabled || providerSettings?.whatsappEnabled || providerSettings?.smsEnabled ? "Ready" : "Limited"}
+            helper="At least one delivery channel should be enabled"
+            icon={Settings2}
+            tone="violet"
+          />
+          <div className="md:col-span-2 xl:col-span-4 flex flex-wrap gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 p-4 shadow-sm backdrop-blur">
+            <Button
+              variant="outline"
+              disabled={!canMutateWithinScope || processDueMutation.isPending || !canManageSettings}
+              onClick={() => processDueMutation.mutate()}
+            >
+              {processDueMutation.isPending ? "Processing..." : "Run due workflows now"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!canMutateWithinScope || resetTemplatesMutation.isPending || !canManage}
+              onClick={() => resetTemplatesMutation.mutate()}
+            >
+              {resetTemplatesMutation.isPending ? "Restoring..." : "Restore billing templates"}
+            </Button>
+            <Button variant="ghost" asChild>
+              <Link href={buildActivityLogsHref({ module: "reminders" })}>Review billing audit trail</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-4">
         <AutomationMetricCard
@@ -644,11 +1122,11 @@ export default function RemindersPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {!canManageSettings ? (
-              <div className="rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground">
+              <div className="rounded-2xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground shadow-sm">
                 You need `settings.update` to change provider and automation controls.
               </div>
             ) : !canMutateWithinScope ? (
-              <div className="rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground">
+              <div className="rounded-2xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground shadow-sm">
                 Tenant-scoped provider settings require an organization context.
               </div>
             ) : providerSettingsQuery.isLoading ? (
@@ -749,7 +1227,7 @@ export default function RemindersPage() {
                         <Textarea rows={7} {...templateForm.register("body")} />
                       </FormField>
                       <Checkbox containerClassName="md:col-span-2" label="Template is active" {...templateForm.register("isActive")} />
-                      <div className="rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground md:col-span-2">
+                      <div className="rounded-2xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground shadow-sm md:col-span-2">
                         Available placeholders: {templatePlaceholderRows.join(", ")}
                       </div>
                       <div className="md:col-span-2 flex justify-end gap-2">
@@ -776,7 +1254,7 @@ export default function RemindersPage() {
               />
             ) : (
               templates.map((template) => (
-                <div key={template.id} className="rounded-2xl border p-4">
+                <div key={template.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -869,7 +1347,7 @@ export default function RemindersPage() {
                       <Input type="number" min={0} {...ruleForm.register("offsetDays", { valueAsNumber: true })} />
                     </FormField>
                     <Checkbox label="Rule is active" {...ruleForm.register("isActive")} />
-                    <div className="rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground md:col-span-2">
+                    <div className="rounded-2xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground shadow-sm md:col-span-2">
                       {automationTriggerOptions.map((option) => (
                         <p key={option.value}>
                           <span className="font-medium text-foreground">{option.label}:</span> {option.description}
@@ -901,7 +1379,7 @@ export default function RemindersPage() {
               rules.map((rule) => {
                 const template = rule.template ?? templateMap.get(rule.templateId);
                 return (
-                  <div key={rule.id} className="rounded-2xl border p-4">
+                  <div key={rule.id} className="rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -990,6 +1468,35 @@ export default function RemindersPage() {
         exportConfig={{ filename: "reminder-logs", rows: exportRows }}
       />
 
+      {selectedReminderIds.length > 0 && canManage ? (
+        <div className="sticky top-0 z-10 rounded-[1.75rem] border border-sky-200 bg-sky-50/90 px-4 py-3 text-sm shadow-sm backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p>
+              {selectedReminderIds.length} reminder{selectedReminderIds.length === 1 ? "" : "s"} selected
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setRowSelection({})}>
+                Clear selection
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => exportRowsToCsv({ filename: "reminder-logs-selected", rows: selectedReminderExportRows })}
+                disabled={selectedReminderExportRows.length === 0}
+              >
+                Export selected
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => bulkDeleteMutation.mutate(selectedReminderIds)}
+                disabled={bulkDeleteMutation.isPending}
+              >
+                {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <DataTable
         data={filteredReminderLogs}
         columns={columns}
@@ -1000,6 +1507,9 @@ export default function RemindersPage() {
             setPageIndex(state.pageIndex);
           }
         }}
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
 
       <Dialog open={Boolean(selectedReminder)} onOpenChange={(open) => !open && setSelectedReminder(null)}>
@@ -1025,12 +1535,12 @@ export default function RemindersPage() {
                 />
                 <DetailItem label="Delivery reference" value={selectedReminder.deliveryReference ?? "Not available"} />
               </div>
-              <div className="rounded-xl border bg-muted/30 p-4">
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
                 <p className="mb-2 font-medium">Complete message</p>
                 <pre className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{selectedReminder.message}</pre>
               </div>
               {selectedReminder.status === "FAILED" ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">
                   <p className="mb-1 font-medium">Failure reason</p>
                   <p>{selectedReminder.failureReason ?? "The backend marked this reminder as failed, but no detailed error was returned."}</p>
                 </div>
@@ -1062,7 +1572,7 @@ function AutomationMetricCard({
           <p className="text-2xl font-semibold tracking-tight">{value}</p>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
-        <div className="rounded-xl border bg-muted/40 p-2 text-muted-foreground">{icon}</div>
+        <div className="rounded-2xl border border-border/70 bg-muted/40 p-2 text-muted-foreground shadow-sm">{icon}</div>
       </CardContent>
     </Card>
   );
@@ -1077,7 +1587,7 @@ function ToggleSetting({
   description: string;
 } & InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <label className="flex items-start justify-between gap-3 rounded-xl border p-4 text-sm">
+    <label className="flex items-start justify-between gap-3 rounded-2xl border border-border/70 p-4 text-sm shadow-sm">
       <div>
         <p className="font-medium">{label}</p>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>

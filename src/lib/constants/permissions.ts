@@ -34,6 +34,8 @@ export const PERMISSIONS = {
   examResults: ["exam-results.create", "exam-results.read", "exam-results.update", "exam-results.delete"],
   fees: ["fees.create", "fees.read", "fees.update", "fees.delete"],
   attendance: ["attendance.create", "attendance.read", "attendance.update", "attendance.delete"],
+  mail: ["mail.create", "mail.read", "mail.update", "mail.delete"],
+  ai: ["ai.use"],
   reminders: ["reminders.create", "reminders.read", "reminders.update", "reminders.delete"],
   reports: ["reports.read"],
   settings: ["settings.update"],

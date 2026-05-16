@@ -39,7 +39,7 @@ export function PortalActivityFeed({ variant }: { variant: "student" | "parent" 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">
             {variant === "parent" ? "Guardian notifications" : "Portal notifications"}
           </p>
@@ -73,10 +73,10 @@ function ActivityItem({ item }: { item: PortalActivityFeedItem }) {
   const Icon = meta.icon;
 
   return (
-    <Card className="border-border/70">
+    <Card className="border-border/70 bg-card/85 shadow-sm backdrop-blur">
       <CardHeader className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={meta.variant}>
                 <Icon className="mr-2 h-3.5 w-3.5" />
@@ -85,14 +85,14 @@ function ActivityItem({ item }: { item: PortalActivityFeedItem }) {
               {item.subjectName ? <Badge variant="outline">{item.subjectName}</Badge> : null}
               {item.status ? <Badge variant="outline">{item.status}</Badge> : null}
             </div>
-            <CardTitle className="text-lg">{item.title}</CardTitle>
+            <CardTitle className="break-words text-lg">{item.title}</CardTitle>
             <CardDescription>{formatDate(item.occurredAt, "MMM d, yyyy p")}</CardDescription>
           </div>
           {item.scoreLabel ? <Badge variant="outline">{item.scoreLabel}</Badge> : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
-        <p className="text-muted-foreground">{item.description}</p>
+        <p className="break-words text-muted-foreground">{item.description}</p>
         {item.actorName ? <p className="text-xs text-muted-foreground">Updated by {item.actorName}</p> : null}
       </CardContent>
     </Card>

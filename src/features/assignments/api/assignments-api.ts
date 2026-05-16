@@ -17,6 +17,8 @@ export const assignmentsApi = {
     unwrapResponse(apiClient.patch<ApiResponse<Assignment>>(endpoints.assignments.detail(id), payload)),
   reviewSubmission: (submissionId: string, payload: ReviewAssignmentSubmissionDto) =>
     unwrapResponse(apiClient.patch<ApiResponse<AssignmentSubmission>>(endpoints.assignments.reviewSubmission(submissionId), payload)),
+  bulkRemove: (ids: string[]) =>
+    unwrapResponse(apiClient.post<ApiResponse<{ deletedCount: number }>>(endpoints.assignments.bulkDelete, { ids })),
   remove: (id: string) =>
     unwrapResponse(apiClient.delete<ApiResponse<{ deleted: boolean }>>(endpoints.assignments.detail(id))),
 };

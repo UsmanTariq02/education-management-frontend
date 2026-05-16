@@ -10,7 +10,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ eyebrow, title, description, actions, className }: PageHeaderProps) {
   return (
-    <div className={cn("flex flex-col gap-5 md:flex-row md:items-end md:justify-between", className)}>
+    <div className={cn("flex flex-col gap-5 rounded-[1.75rem] border border-border/60 bg-card/70 p-5 shadow-sm backdrop-blur md:flex-row md:items-end md:justify-between md:p-6", className)}>
       <div className="space-y-3">
         {eyebrow ? (
           <p className="inline-flex rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
