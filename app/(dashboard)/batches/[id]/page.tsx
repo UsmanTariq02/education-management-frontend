@@ -20,12 +20,12 @@ export default function BatchDetailPage() {
   const batchQuery = useQuery({ queryKey: ["batch", batchId], queryFn: () => batchesApi.detail(batchId), enabled: Boolean(batchId) });
   const studentsQuery = useQuery({
     queryKey: ["batch", batchId, "students"],
-    queryFn: () => studentsApi.list({ page: 1, limit: 200 }),
+    queryFn: () => studentsApi.list({ page: 1, limit: 100 }),
     enabled: Boolean(batchId) && canReadStudents,
   });
   const attendanceQuery = useQuery({
     queryKey: ["batch", batchId, "attendance"],
-    queryFn: () => attendanceApi.list({ page: 1, limit: 200 }),
+    queryFn: () => attendanceApi.list({ page: 1, limit: 100 }),
     enabled: Boolean(batchId) && canReadAttendance,
   });
 

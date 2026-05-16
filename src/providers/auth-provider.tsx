@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSessionState] = useState<SessionState | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const stored = readSession();
@@ -30,9 +32,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsHydrated(true);
   }, []);
 
+  useEffect(() => {
+    if (!isHydrated || !session?.accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncCurrentUser = async () => {
+      try {
+        const user = await authApi.me();
+        if (cancelled) return;
+
+        setSession({
+          ...session,
+          user,
+        });
+      } catch {
+        if (cancelled) return;
+        setSession(null);
+        router.replace("/login");
+      }
+    };
+
+    void syncCurrentUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHydrated, router, session?.accessToken]);
+
   const setSession = (nextSession: SessionState | null) => {
+    const shouldResetQueries =
+      session?.user.id !== nextSession?.user.id ||
+      session?.user.organizationId !== nextSession?.user.organizationId;
+
     setSessionState(nextSession);
     writeSession(nextSession);
+
+    if (shouldResetQueries) {
+      void queryClient.clear();
+    }
   };
 
   const refreshCurrentUser = async () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Eye, Mail, Phone, PhoneCall, UserRoundSearch } from "lucide-react";
@@ -14,14 +15,31 @@ import { MetricCard } from "@/components/cards/metric-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { inquiriesApi } from "@/features/inquiries/api/inquiries-api";
 import { normalizeApiError } from "@/lib/api/errors";
 import { formatDate } from "@/lib/formatters";
 import { useAuth } from "@/providers/auth-provider";
 import type { ContactInquiry, ContactInquiryStatus } from "@/types/domain";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useSavedFilterPresets } from "@/hooks/use-saved-filter-presets";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { aiApi } from "@/features/ai/api/ai-api";
+import type { AiSupportReply } from "@/types/domain";
 
 const statusOptions: ContactInquiryStatus[] = ["NEW", "REVIEWED", "CONTACTED"];
+
+const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      query.set(key, value);
+    }
+  }
+
+  return query.toString() ? `/activity-logs?${query.toString()}` : "/activity-logs";
+};
 
 export default function InquiriesPage() {
   const { user } = useAuth();
@@ -29,9 +47,16 @@ export default function InquiriesPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] = useState<ContactInquiryStatus | "ALL">("ALL");
+  const [selectedPresetId, setSelectedPresetId] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const [selectedInquiry, setSelectedInquiry] = useState<ContactInquiry | null>(null);
+  const [aiReply, setAiReply] = useState<AiSupportReply | null>(null);
+  const [aiTone, setAiTone] = useState("friendly and concise");
   const pageSize = 12;
+  const savedInquiryFilterPresets = useSavedFilterPresets<{
+    search: string;
+    statusFilter: ContactInquiryStatus | "ALL";
+  }>("inquiries-filter-presets");
 
   const inquiriesQuery = useQuery({
     queryKey: ["inquiries", debouncedSearch, pageIndex, pageSize],
@@ -44,6 +69,38 @@ export default function InquiriesPage() {
     onSuccess: () => {
       toast.success("Inquiry status updated");
       queryClient.invalidateQueries({ queryKey: ["inquiries"] });
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const aiReplyMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedInquiry) {
+        throw new Error("Inquiry is required");
+      }
+
+      return aiApi.generateSupportReply({
+        question: `How should support respond to this inquiry?\n\n${selectedInquiry.fullName} (${selectedInquiry.email})\n${selectedInquiry.institutionName}\n${selectedInquiry.message}`,
+        conversationSummary: [
+          `Contact: ${selectedInquiry.fullName} (${selectedInquiry.email})`,
+          `Institution: ${selectedInquiry.institutionName}`,
+          selectedInquiry.institutionType ? `Type: ${selectedInquiry.institutionType}` : null,
+          selectedInquiry.expectedUserCount ? `Expected users: ${selectedInquiry.expectedUserCount}` : null,
+          selectedInquiry.inquiryType ? `Inquiry type: ${selectedInquiry.inquiryType}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        contextBullets: [
+          `Requested modules: ${selectedInquiry.requestedModules.join(", ")}`,
+          "Keep the response helpful, short, and professional.",
+          "Escalate to sales or operations if the request is unclear or needs manual follow-up.",
+        ],
+        tone: aiTone,
+      });
+    },
+    onSuccess: (reply) => {
+      setAiReply(reply);
+      toast.success("AI reply suggestion generated");
     },
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
@@ -113,7 +170,7 @@ export default function InquiriesPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedInquiry(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedInquiry(row.original)}>
               View
             </Button>
             <Button variant="ghost" size="icon" asChild>
@@ -178,6 +235,83 @@ export default function InquiriesPage() {
         <MetricCard title="Reviewed" value={String(inquiryStats.reviewedCount)} helper="Leads already triaged by super admin" icon={Mail} tone="violet" />
         <MetricCard title="Contacted" value={String(inquiryStats.contactedCount)} helper="Leads already reached out to" icon={PhoneCall} tone="emerald" />
       </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ module: "contact-inquiries" })}>Audit inquiry events</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ module: "contact-inquiries", action: "status-update" })}>Audit status updates</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={buildActivityLogsHref({ module: "contact-inquiries", action: "create" })}>Audit submissions</Link>
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 px-4 py-3 text-sm shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Saved views</span>
+          <Select
+            value={selectedPresetId}
+            onValueChange={(presetId) => {
+              const preset = savedInquiryFilterPresets.presets.find((item) => item.id === presetId);
+              if (!preset) return;
+
+              setSearch(preset.value.search);
+              setStatusFilter(preset.value.statusFilter);
+              setSelectedPresetId(preset.id);
+              setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select saved view" />
+            </SelectTrigger>
+            <SelectContent>
+              {savedInquiryFilterPresets.presets.length === 0 ? (
+                <SelectItem value="__none" disabled>
+                  No saved views yet
+                </SelectItem>
+              ) : (
+                savedInquiryFilterPresets.presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const name = window.prompt("Save the current inquiry filters as:");
+              const preset = name
+                ? savedInquiryFilterPresets.savePreset(name, {
+                    search,
+                    statusFilter,
+                  })
+                : null;
+
+              if (preset) {
+                setSelectedPresetId(preset.id);
+                toast.success(`Saved view "${preset.name}"`);
+              }
+            }}
+          >
+            Save current view
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              savedInquiryFilterPresets.clearPresets();
+              setSelectedPresetId("");
+              toast.success("Saved inquiry views cleared");
+            }}
+            disabled={savedInquiryFilterPresets.presets.length === 0}
+          >
+            Clear saved views
+          </Button>
+        </div>
+      </div>
       <FilterBar
         search={search}
         onSearchChange={(value) => {
@@ -187,7 +321,7 @@ export default function InquiriesPage() {
         searchPlaceholder="Search inquiries by contact or institution..."
         filters={
           <select
-            className="h-10 rounded-xl border bg-background px-3 text-sm"
+            className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm"
             value={statusFilter}
             onChange={(event) => {
               setStatusFilter(event.target.value as ContactInquiryStatus | "ALL");
@@ -239,9 +373,36 @@ export default function InquiriesPage() {
                   ))}
                 </div>
               </div>
-              <div className="rounded-xl border bg-muted/30 p-4">
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
                 <p className="mb-2 font-medium">Message</p>
                 <p className="whitespace-pre-wrap text-muted-foreground">{selectedInquiry.message}</p>
+              </div>
+              <div className="space-y-3 rounded-2xl border border-border/70 bg-muted/20 p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">AI support reply</p>
+                    <p className="text-xs text-muted-foreground">Generate a support-style response you can copy into follow-up mail.</p>
+                  </div>
+                  <Button variant="outline" onClick={() => aiReplyMutation.mutate()} disabled={aiReplyMutation.isPending}>
+                    {aiReplyMutation.isPending ? "Generating..." : "Generate reply"}
+                  </Button>
+                </div>
+                <div className="grid gap-2 md:grid-cols-[140px_minmax(0,1fr)] md:items-center">
+                  <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Tone</span>
+                  <Input value={aiTone} onChange={(event) => setAiTone(event.target.value)} />
+                </div>
+                {aiReply ? (
+                  <div className="space-y-3 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
+                    <p className="text-sm font-medium">{aiReply.escalationNeeded ? "Escalation needed" : "Direct reply ready"}</p>
+                    <p className="whitespace-pre-wrap text-sm leading-7 text-foreground">{aiReply.reply}</p>
+                    <p className="text-xs text-muted-foreground">{aiReply.reason}</p>
+                    <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                      {aiReply.suggestedActions.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-3">
                 <Button asChild>

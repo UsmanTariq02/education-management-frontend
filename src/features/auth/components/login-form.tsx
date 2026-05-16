@@ -44,8 +44,11 @@ export function LoginForm() {
   });
 
   return (
-    <Card className="w-full max-w-md">
+    <Card className="w-full max-w-md border-border/70 bg-card/90 shadow-xl shadow-slate-900/5 backdrop-blur">
       <CardHeader>
+        <div className="mb-2 inline-flex w-fit rounded-full bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-primary">
+          Sign in
+        </div>
         <CardTitle>Sign in</CardTitle>
         <CardDescription>Use your organization credentials to access the operations console.</CardDescription>
       </CardHeader>
@@ -58,7 +61,7 @@ export function LoginForm() {
             <Input type="password" {...form.register("password")} placeholder="••••••••" />
           </FormField>
           {form.formState.errors.root ? <p className="text-sm text-destructive">{form.formState.errors.root.message}</p> : null}
-          <Button type="submit" className="w-full" disabled={mutation.isPending}>
+          <Button type="submit" className="w-full shadow-sm shadow-primary/15" disabled={mutation.isPending}>
             {mutation.isPending ? "Signing in..." : "Sign in"}
           </Button>
         </form>

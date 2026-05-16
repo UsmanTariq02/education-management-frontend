@@ -2,15 +2,16 @@ import { apiClient, unwrapResponse } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import { buildQueryParams } from "@/lib/api/query-utils";
 import type { ApiResponse, PaginatedResult, PaginationParams } from "@/types/api";
-import type { CreateStudentDto, UpdateStudentDto } from "@/types/dto";
-import type { Student, StudentImportSummary } from "@/types/domain";
+import type { BulkDeleteDto, CreateStudentDto, UpdateStudentDto, UpsertPortalAccessDto } from "@/types/dto";
+import type { Student, StudentDetail, StudentImportSummary, StudentPortalAccess } from "@/types/domain";
+import type { PortalAuthResponse } from "@/types/auth";
 
 export const studentsApi = {
   list: (params: PaginationParams) =>
     unwrapResponse(
       apiClient.get<ApiResponse<PaginatedResult<Student>>>(`${endpoints.students.list}?${buildQueryParams(params).toString()}`),
     ),
-  detail: (id: string) => unwrapResponse(apiClient.get<ApiResponse<Student>>(endpoints.students.detail(id))),
+  detail: (id: string) => unwrapResponse(apiClient.get<ApiResponse<StudentDetail>>(endpoints.students.detail(id))),
   create: (payload: CreateStudentDto) =>
     unwrapResponse(apiClient.post<ApiResponse<Student>>(endpoints.students.list, payload)),
   importCsv: async (file: File) => {
@@ -32,6 +33,18 @@ export const studentsApi = {
   },
   update: (id: string, payload: UpdateStudentDto) =>
     unwrapResponse(apiClient.patch<ApiResponse<Student>>(endpoints.students.detail(id), payload)),
+  portalLogin: (id: string) =>
+    unwrapResponse(apiClient.post<ApiResponse<PortalAuthResponse>>(endpoints.students.portalLogin(id))),
+  parentPortalLogin: (id: string) =>
+    unwrapResponse(apiClient.post<ApiResponse<PortalAuthResponse>>(endpoints.students.parentPortalLogin(id))),
+  portalAccess: (id: string) =>
+    unwrapResponse(apiClient.get<ApiResponse<StudentPortalAccess>>(endpoints.students.portalAccess(id))),
+  upsertPortalAccess: ({ id, payload }: { id: string; payload: UpsertPortalAccessDto }) =>
+    unwrapResponse(apiClient.post<ApiResponse<StudentPortalAccess>>(endpoints.students.portalAccess(id), payload)),
   remove: (id: string) =>
     unwrapResponse(apiClient.delete<ApiResponse<{ deleted: boolean }>>(endpoints.students.detail(id))),
+  bulkRemove: (ids: string[]) =>
+    unwrapResponse(apiClient.post<ApiResponse<{ deletedCount: number }>>(endpoints.students.bulkDelete, { ids } satisfies BulkDeleteDto)),
+  bulkUpdateStatus: (ids: string[], isActive: boolean) =>
+    unwrapResponse(apiClient.post<ApiResponse<{ updatedCount: number }>>(endpoints.students.bulkStatus, { ids, isActive })),
 };

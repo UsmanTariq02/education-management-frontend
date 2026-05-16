@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ShieldCheck, UserCheck, UserCog, UserX } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { ShieldCheck, Trash2, UserCheck, UserCog, UserX } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { useForm } from "react-hook-form";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { organizationsApi } from "@/features/organizations/api/organizations-api";
 import { rolesApi } from "@/features/roles/api/roles-api";
@@ -21,6 +23,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/form-field";
@@ -31,42 +34,66 @@ import { OrganizationScopeBanner } from "@/components/shared/organization-scope-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MetricCard } from "@/components/cards/metric-card";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useSavedFilterPresets } from "@/hooks/use-saved-filter-presets";
+import { exportRowsToCsv } from "@/lib/utils/export";
 
 export default function UsersPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [roleFilter, setRoleFilter] = useState("ALL");
+  const [selectedPresetId, setSelectedPresetId] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const pageSize = 10;
   const [open, setOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [rolePresetName, setRolePresetName] = useState<string | null>(null);
   const canManage = usePermission("users.update");
   const canCreate = usePermission("users.create");
+  const canDelete = usePermission("users.delete");
   const queryClient = useQueryClient();
+  const isTenantAdmin = Boolean(user?.organizationId) && !user?.roles.includes("SUPER_ADMIN");
+  const savedUserFilterPresets = useSavedFilterPresets<{
+    search: string;
+    statusFilter: string;
+    roleFilter: string;
+  }>("users-filter-presets");
   const assignableRoleNames = useMemo(() => {
     if (user?.roles.includes("SUPER_ADMIN")) {
-      return new Set(["SUPER_ADMIN", "ADMIN", "STAFF"]);
+      return new Set(["SUPER_ADMIN", "ADMIN", "ACADEMIC_COORDINATOR", "TEACHER", "STAFF"]);
     }
 
     if (user?.roles.includes("ADMIN")) {
-      return new Set(["ADMIN", "STAFF"]);
+      return new Set(["ADMIN", "ACADEMIC_COORDINATOR", "TEACHER", "STAFF"]);
+    }
+
+    if (user?.roles.includes("ACADEMIC_COORDINATOR")) {
+      return new Set(["TEACHER", "STAFF"]);
     }
 
     return new Set(["STAFF"]);
   }, [user?.roles]);
 
   const usersQuery = useQuery({
-    queryKey: ["users", debouncedSearch, pageIndex, pageSize],
+    queryKey: ["users", user?.id ?? "guest", user?.organizationId ?? "platform", debouncedSearch, pageIndex, pageSize],
     queryFn: () => usersApi.list({ page: pageIndex + 1, limit: pageSize, search: debouncedSearch }),
   });
-  const rolesQuery = useQuery({ queryKey: ["roles", "users-page"], queryFn: rolesApi.list });
+  const shouldLoadReferenceData = open || Boolean(selectedUser) || Boolean(editingUser);
+  const rolesQuery = useQuery({
+    queryKey: ["roles", "users-page"],
+    queryFn: rolesApi.list,
+    enabled: shouldLoadReferenceData,
+  });
   const organizationsQuery = useQuery({
     queryKey: ["organizations", "users-page"],
     queryFn: () => organizationsApi.list({ page: 1, limit: 100 }),
-    enabled: user?.roles.includes("SUPER_ADMIN") ?? false,
+    enabled: (user?.roles.includes("SUPER_ADMIN") ?? false) && shouldLoadReferenceData,
   });
 
   const form = useForm<UserSchema>({
@@ -132,12 +159,105 @@ export default function UsersPage() {
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (targetUser: User) => usersApi.remove(targetUser.id),
+    onSuccess: (_, targetUser) => {
+      toast.success("User deleted");
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      if (selectedUser?.id === targetUser.id) {
+        setSelectedUser(null);
+      }
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => usersApi.bulkRemove(ids),
+    onSuccess: () => {
+      toast.success("Selected users deleted");
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: async (payload: { ids: string[]; isActive: boolean }) => usersApi.bulkUpdateStatus(payload.ids, payload.isActive),
+    onSuccess: (_, variables) => {
+      toast.success(variables.isActive ? "Selected users activated" : "Selected users deactivated");
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      setRowSelection({});
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
   const assignableRoles = useMemo(
     () => (rolesQuery.data ?? []).filter((role) => assignableRoleNames.has(role.name)),
     [assignableRoleNames, rolesQuery.data],
   );
+  const academicCoordinatorRole = useMemo(
+    () => assignableRoles.find((role) => role.name === "ACADEMIC_COORDINATOR") ?? null,
+    [assignableRoles],
+  );
+  const adminRole = useMemo(
+    () => assignableRoles.find((role) => role.name === "ADMIN") ?? null,
+    [assignableRoles],
+  );
+  const staffRole = useMemo(
+    () => assignableRoles.find((role) => role.name === "STAFF") ?? null,
+    [assignableRoles],
+  );
+  const selectedRoleNames = useMemo(
+    () =>
+      assignableRoles
+        .filter((role) => form.watch("roleIds").includes(role.id))
+        .map((role) => role.name),
+    [assignableRoles, form],
+  );
+  const isAcademicCoordinatorFlow = selectedRoleNames.includes("ACADEMIC_COORDINATOR");
+  const isAdminFlow = selectedRoleNames.includes("ADMIN");
+  const isStaffFlow = selectedRoleNames.includes("STAFF");
+  const buildActivityLogsHref = (params: Record<string, string | undefined>) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
+        searchParams.set(key, value);
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `/activity-logs?${query}` : "/activity-logs";
+  };
 
   const canManageTargetUser = (targetUser: User): boolean => targetUser.roles.every((role) => assignableRoleNames.has(role));
+
+  const openCreateUserDialog = (presetRoleName?: string) => {
+    setEditingUser(null);
+    setRolePresetName(presetRoleName ?? null);
+
+    const presetRoleIds = presetRoleName
+      ? assignableRoles.filter((role) => role.name === presetRoleName).map((role) => role.id)
+      : [];
+
+    form.reset({
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      organizationId: user?.roles.includes("SUPER_ADMIN") ? undefined : user?.organizationId ?? undefined,
+      isActive: true,
+      roleIds: presetRoleIds,
+    });
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!canCreate || searchParams?.get("create") !== "1" || open) {
+      return;
+    }
+
+    openCreateUserDialog();
+    router.replace(pathname ?? "/users", { scroll: false });
+  }, [canCreate, open, openCreateUserDialog, pathname, router, searchParams]);
 
   const columns = useMemo<Array<ColumnDef<User>>>(
     () => [
@@ -184,20 +304,38 @@ export default function UsersPage() {
         header: "Actions",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedUser(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedUser(row.original)}>
               View
             </Button>
+            {canDelete ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="rounded-full px-3 shadow-sm"
+                onClick={() => {
+                  if (window.confirm(`Delete ${row.original.firstName} ${row.original.lastName}? This cannot be undone.`)) {
+                    deleteMutation.mutate(row.original);
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            ) : null}
             {canManage ? (
               <>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
+                  className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5"
                   disabled={!canManageTargetUser(row.original)}
                   onClick={() => {
                     if (!canManageTargetUser(row.original)) {
                       return;
                     }
                     setEditingUser(row.original);
+                    setRolePresetName(null);
                     form.reset({
                       firstName: row.original.firstName,
                       lastName: row.original.lastName,
@@ -215,8 +353,9 @@ export default function UsersPage() {
                   Edit
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
+                  className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5"
                   disabled={!canManageTargetUser(row.original) || toggleActiveMutation.isPending}
                   onClick={() => {
                     if (!canManageTargetUser(row.original)) {
@@ -236,7 +375,7 @@ export default function UsersPage() {
         ),
       },
     ],
-    [assignableRoleNames, canManage, form, rolesQuery.data],
+    [assignableRoleNames, canDelete, canManage, deleteMutation, form, rolesQuery.data],
   );
 
   const filteredUsers = useMemo(() => {
@@ -252,6 +391,22 @@ export default function UsersPage() {
   }, [roleFilter, statusFilter, usersQuery.data]);
 
   const hasLocalFilters = statusFilter !== "ALL" || roleFilter !== "ALL";
+  const selectedUserIds = Object.entries(rowSelection)
+    .filter(([, selected]) => selected)
+    .map(([id]) => id);
+  const selectedUserExportRows = useMemo(
+    () =>
+      filteredUsers
+        .filter((item) => selectedUserIds.includes(item.id))
+        .map((user) => ({
+          Name: `${user.firstName} ${user.lastName}`,
+          Email: user.email,
+          Roles: user.roles.join(", "),
+          Status: user.isActive ? "Active" : "Inactive",
+          Created: formatDate(user.createdAt),
+        })),
+    [filteredUsers, selectedUserIds],
+  );
 
   const exportRows = useMemo(
     () =>
@@ -273,6 +428,12 @@ export default function UsersPage() {
       totalRolesAssigned: filteredUsers.reduce((sum, item) => sum + item.roles.length, 0),
     };
   }, [filteredUsers]);
+  const userLimitReached =
+    isTenantAdmin && user?.userLimit !== null ? (usersQuery.data?.total ?? 0) >= (user?.userLimit ?? 0) : false;
+  const userCapacityText =
+    isTenantAdmin && user?.userLimit !== null && usersQuery.data
+      ? `${usersQuery.data.total}/${user?.userLimit ?? 0} user slots used for this organization`
+      : "Users in the current page scope";
 
   if (usersQuery.isLoading) return <LoadingState rows={6} />;
   if (usersQuery.isError || !usersQuery.data) return <ErrorState description="Users could not be loaded." onRetry={() => usersQuery.refetch()} />;
@@ -281,12 +442,34 @@ export default function UsersPage() {
     <div className="space-y-6">
       <PageHeader eyebrow="Access control" title="Users management" description="Manage user accounts, activation states, and role assignment." />
       <OrganizationScopeBanner moduleLabel="User access control" />
+      <div className="rounded-2xl border bg-muted/30 p-4 text-sm">
+        <p className="font-medium">Recommended use</p>
+        <p className="mt-1 text-muted-foreground">
+          Use this area for organization access roles like admins, academic coordinators, and staff. For faculty onboarding, create the teacher profile first and provision login there. For learners, create the student record first and enable portal access there.
+        </p>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Visible users" value={String(userStats.totalUsers)} helper="Users in the current page scope" icon={UserCog} tone="sky" />
+        <MetricCard title="Visible users" value={String(userStats.totalUsers)} helper={userCapacityText} icon={UserCog} tone="sky" />
         <MetricCard title="Active users" value={String(userStats.activeUsers)} helper="Accounts currently enabled" icon={UserCheck} tone="emerald" />
         <MetricCard title="Inactive users" value={String(userStats.inactiveUsers)} helper="Accounts blocked from login" icon={UserX} tone="amber" />
         <MetricCard title="Role assignments" value={String(userStats.totalRolesAssigned)} helper="Total role entries across listed users" icon={ShieldCheck} tone="violet" />
       </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ module: "users" })}>Audit user events</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-status" })}>Audit bulk status</Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={buildActivityLogsHref({ action: "bulk-delete" })}>Audit bulk deletes</Link>
+        </Button>
+      </div>
+      {userLimitReached ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
+          User limit reached for this organization. Increase the tenant user limit from the super admin organizations module before adding more users.
+        </div>
+      ) : null}
       <FilterBar
         search={search}
         onSearchChange={(value) => {
@@ -297,7 +480,7 @@ export default function UsersPage() {
         filters={
           <>
             <select
-              className="h-10 rounded-xl border bg-background px-3 text-sm"
+              className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm"
               value={statusFilter}
               onChange={(event) => {
                 setStatusFilter(event.target.value);
@@ -309,7 +492,7 @@ export default function UsersPage() {
               <option value="INACTIVE">Inactive only</option>
             </select>
             <select
-              className="h-10 rounded-xl border bg-background px-3 text-sm"
+              className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm"
               value={roleFilter}
               onChange={(event) => {
                 setRoleFilter(event.target.value);
@@ -334,17 +517,55 @@ export default function UsersPage() {
                 setOpen(nextOpen);
                 if (!nextOpen) {
                   setEditingUser(null);
+                  setRolePresetName(null);
                   form.reset();
                 }
               }}
             >
-              <DialogTrigger asChild>
-                <Button>Create user</Button>
-              </DialogTrigger>
+              <div className="flex flex-wrap items-center gap-2">
+                {adminRole ? (
+                  <Button variant="outline" disabled={userLimitReached} onClick={() => openCreateUserDialog("ADMIN")}>
+                    Create admin
+                  </Button>
+                ) : null}
+                {academicCoordinatorRole ? (
+                  <Button variant="outline" disabled={userLimitReached} onClick={() => openCreateUserDialog("ACADEMIC_COORDINATOR")}>
+                    Create academic coordinator
+                  </Button>
+                ) : null}
+                {staffRole ? (
+                  <Button variant="outline" disabled={userLimitReached} onClick={() => openCreateUserDialog("STAFF")}>
+                    Create staff
+                  </Button>
+                ) : null}
+                <DialogTrigger asChild>
+                  <Button disabled={userLimitReached} onClick={() => openCreateUserDialog()}>
+                    Create user
+                  </Button>
+                </DialogTrigger>
+              </div>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{editingUser ? "Edit user" : "Create user"}</DialogTitle>
-                  <DialogDescription>Fields align with `CreateUserDto` and `UpdateUserDto` from the NestJS backend.</DialogDescription>
+                  <DialogTitle>
+                    {editingUser
+                      ? "Edit user"
+                      : rolePresetName === "ADMIN"
+                        ? "Create admin"
+                        : rolePresetName === "ACADEMIC_COORDINATOR"
+                          ? "Create academic coordinator"
+                          : rolePresetName === "STAFF"
+                            ? "Create staff"
+                            : "Create user"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {rolePresetName === "ADMIN"
+                      ? "This guided flow provisions an organization admin account without manually assembling the role assignment."
+                      : rolePresetName === "ACADEMIC_COORDINATOR"
+                        ? "This guided flow provisions an academic coordinator account without manually assembling the role assignment."
+                        : rolePresetName === "STAFF"
+                          ? "This guided flow provisions a staff account without manually assembling the role assignment."
+                          : "Fields align with `CreateUserDto` and `UpdateUserDto` from the NestJS backend."}
+                  </DialogDescription>
                 </DialogHeader>
                 <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
                   <FormField label="First name" required error={form.formState.errors.firstName}>
@@ -381,31 +602,45 @@ export default function UsersPage() {
                   </FormField>
                   <div className="space-y-2 md:col-span-2">
                     <p className="text-sm font-medium">Roles</p>
-                    <div className="grid gap-2 rounded-xl border p-4">
+                    {rolePresetName ? (
+                      <div className="rounded-2xl border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground shadow-sm">
+                        Role preset: <span className="font-medium text-foreground">{rolePresetName.replaceAll("_", " ")}</span>
+                      </div>
+                    ) : null}
+                    <div className="grid gap-2 rounded-2xl border border-border/70 bg-background/70 p-4 shadow-sm">
                       {assignableRoles.map((role) => (
-                        <label key={role.id} className="flex items-center gap-3 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={form.watch("roleIds").includes(role.id)}
-                            onChange={(event) => {
-                              const current = form.getValues("roleIds");
-                              form.setValue(
-                                "roleIds",
-                                event.target.checked ? [...current, role.id] : current.filter((item) => item !== role.id),
-                                { shouldValidate: true, shouldDirty: true },
-                              );
-                            }}
-                          />
-                          <span>{role.name}</span>
-                        </label>
+                        <Checkbox
+                          key={role.id}
+                          checked={form.watch("roleIds").includes(role.id)}
+                          onChange={(event) => {
+                            const current = form.getValues("roleIds");
+                            form.setValue(
+                              "roleIds",
+                              event.target.checked ? [...current, role.id] : current.filter((item) => item !== role.id),
+                              { shouldValidate: true, shouldDirty: true },
+                            );
+                          }}
+                          label={role.name}
+                        />
                       ))}
                     </div>
                     {form.formState.errors.roleIds ? <p className="text-xs text-destructive">{form.formState.errors.roleIds.message}</p> : null}
                   </div>
-                  <label className="flex items-center gap-3 text-sm md:col-span-2">
-                    <input type="checkbox" checked={form.watch("isActive")} onChange={(event) => form.setValue("isActive", event.target.checked, { shouldDirty: true })} />
-                    <span>User account is active</span>
-                  </label>
+                  {(isAdminFlow || isAcademicCoordinatorFlow || isStaffFlow) && !editingUser ? (
+                    <div className="rounded-2xl border bg-muted/30 p-4 text-sm md:col-span-2">
+                      {isAdminFlow
+                        ? "Admins are best used for organization-wide operations, access control, student records, academics, and tenant settings."
+                        : isAcademicCoordinatorFlow
+                          ? "Academic coordinators are best used for academic operations oversight, including subjects, teachers, timetables, exams, and report workflows."
+                          : "Staff accounts are best used for day-to-day support work with restricted permissions and no platform governance access."}
+                    </div>
+                  ) : null}
+                  <Checkbox
+                    checked={form.watch("isActive")}
+                    onChange={(event) => form.setValue("isActive", event.target.checked, { shouldDirty: true })}
+                    label="User account is active"
+                    containerClassName="md:col-span-2"
+                  />
                   <div className="md:col-span-2 flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                       Cancel
@@ -420,6 +655,116 @@ export default function UsersPage() {
           ) : null
         }
       />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 px-4 py-3 text-sm shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Saved views</span>
+          <Select
+            value={selectedPresetId}
+            onValueChange={(presetId) => {
+              const preset = savedUserFilterPresets.presets.find((item) => item.id === presetId);
+              if (!preset) {
+                return;
+              }
+
+              setSearch(preset.value.search);
+              setStatusFilter(preset.value.statusFilter);
+              setRoleFilter(preset.value.roleFilter);
+              setSelectedPresetId(preset.id);
+              setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select saved view" />
+            </SelectTrigger>
+            <SelectContent>
+              {savedUserFilterPresets.presets.length === 0 ? (
+                <SelectItem value="__none" disabled>
+                  No saved views yet
+                </SelectItem>
+              ) : (
+                savedUserFilterPresets.presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const name = window.prompt("Save the current user filters as:");
+              const preset = name
+                ? savedUserFilterPresets.savePreset(name, {
+                    search,
+                    statusFilter,
+                    roleFilter,
+                  })
+                : null;
+
+              if (preset) {
+                setSelectedPresetId(preset.id);
+                toast.success(`Saved view "${preset.name}"`);
+              }
+            }}
+          >
+            Save current view
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              savedUserFilterPresets.clearPresets();
+              setSelectedPresetId("");
+              toast.success("Saved user views cleared");
+            }}
+            disabled={savedUserFilterPresets.presets.length === 0}
+          >
+            Clear saved views
+          </Button>
+        </div>
+      </div>
+      {selectedUserIds.length > 0 && canManage ? (
+        <div className="flex items-center justify-between rounded-[1.75rem] border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm shadow-sm">
+          <p>
+            {selectedUserIds.length} user{selectedUserIds.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setRowSelection({})}>
+              Clear selection
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => exportRowsToCsv({ filename: "users-selected", rows: selectedUserExportRows })}
+              disabled={selectedUserExportRows.length === 0}
+            >
+              Export selected
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => bulkStatusMutation.mutate({ ids: selectedUserIds, isActive: true })}
+              disabled={bulkStatusMutation.isPending || bulkDeleteMutation.isPending}
+            >
+              Activate selected
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => bulkStatusMutation.mutate({ ids: selectedUserIds, isActive: false })}
+              disabled={bulkStatusMutation.isPending || bulkDeleteMutation.isPending}
+            >
+              Deactivate selected
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => bulkDeleteMutation.mutate(selectedUserIds)}
+              disabled={bulkDeleteMutation.isPending || bulkStatusMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Deleting..." : "Delete selected"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <DataTable
         data={filteredUsers}
         columns={columns}
@@ -430,6 +775,9 @@ export default function UsersPage() {
             setPageIndex(state.pageIndex);
           }
         }}
+        enableRowSelection
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
       />
       <Dialog open={Boolean(selectedUser)} onOpenChange={(nextOpen) => !nextOpen && setSelectedUser(null)}>
         <DialogContent>

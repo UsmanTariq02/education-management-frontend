@@ -2,26 +2,39 @@ import { apiClient, unwrapResponse } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import type { ApiResponse } from "@/types/api";
 import type {
+  AcademicDashboardSummary,
   AttendanceStatusPoint,
   AttendanceBatchPoint,
   AttendanceDailyTrendPoint,
   BatchStatusPoint,
+  BatchPerformancePoint,
   BatchCollectionPoint,
   DashboardSummary,
   EnrollmentTrendPoint,
+  ExamSchedulePoint,
   FeeCollectionTrendPoint,
+  FeeCollectionOverview,
+  FeeCollectionComparisonPoint,
   FeeStatusPoint,
+  GradeDistributionPoint,
   ReminderChannelPoint,
   ReminderDailyTrendPoint,
   ReminderStatusPoint,
+  ResultStatusPoint,
   StudentBatchDistributionPoint,
   StudentStatusPoint,
+  UnifiedReportCard,
   UserRoleDistributionPoint,
   UserStatusPoint,
+  WeeklyPrincipalSummary,
 } from "@/types/domain";
+import type { PaginatedResult, PaginationParams } from "@/types/api";
+import { buildQueryParams } from "@/lib/api/query-utils";
 
 export const reportsApi = {
   summary: () => unwrapResponse(apiClient.get<ApiResponse<DashboardSummary>>(endpoints.reports.summary)),
+  weeklyPrincipalSummary: () =>
+    unwrapResponse(apiClient.post<ApiResponse<WeeklyPrincipalSummary>>(endpoints.reports.weeklyPrincipalSummary, {})),
   totalStudents: () => unwrapResponse(apiClient.get<ApiResponse<{ totalStudents: number }>>(endpoints.reports.totalStudents)),
   activeStudents: () => unwrapResponse(apiClient.get<ApiResponse<{ activeStudents: number }>>(endpoints.reports.activeStudents)),
   enrollmentTrend: () =>
@@ -34,12 +47,30 @@ export const reportsApi = {
     unwrapResponse(apiClient.get<ApiResponse<UserRoleDistributionPoint[]>>(endpoints.reports.userRoleDistribution)),
   userStatusSummary: () =>
     unwrapResponse(apiClient.get<ApiResponse<UserStatusPoint[]>>(endpoints.reports.userStatusSummary)),
+  academicSummary: () =>
+    unwrapResponse(apiClient.get<ApiResponse<AcademicDashboardSummary>>(endpoints.reports.academicSummary)),
+  unifiedReportCards: (params: PaginationParams) =>
+    unwrapResponse(
+      apiClient.get<ApiResponse<PaginatedResult<UnifiedReportCard>>>(`${endpoints.reports.unifiedReportCards}?${buildQueryParams(params).toString()}`),
+    ),
+  gradeDistribution: () =>
+    unwrapResponse(apiClient.get<ApiResponse<GradeDistributionPoint[]>>(endpoints.reports.gradeDistribution)),
+  examScheduleTrend: () =>
+    unwrapResponse(apiClient.get<ApiResponse<ExamSchedulePoint[]>>(endpoints.reports.examScheduleTrend)),
+  batchPerformance: () =>
+    unwrapResponse(apiClient.get<ApiResponse<BatchPerformancePoint[]>>(endpoints.reports.batchPerformance)),
+  resultStatusSummary: () =>
+    unwrapResponse(apiClient.get<ApiResponse<ResultStatusPoint[]>>(endpoints.reports.resultStatusSummary)),
   batchStatusSummary: () =>
     unwrapResponse(apiClient.get<ApiResponse<BatchStatusPoint[]>>(endpoints.reports.batchStatusSummary)),
   monthlyFeeCollection: () =>
     unwrapResponse(apiClient.get<ApiResponse<{ monthlyFeeCollection: number }>>(endpoints.reports.monthlyFeeCollection)),
   feeCollectionTrend: () =>
     unwrapResponse(apiClient.get<ApiResponse<FeeCollectionTrendPoint[]>>(endpoints.reports.feeCollectionTrend)),
+  feeCollectionOverview: () =>
+    unwrapResponse(apiClient.get<ApiResponse<FeeCollectionOverview>>(endpoints.reports.feeCollectionOverview)),
+  feePeriodComparison: () =>
+    unwrapResponse(apiClient.get<ApiResponse<FeeCollectionComparisonPoint[]>>(endpoints.reports.feePeriodComparison)),
   batchCollection: () =>
     unwrapResponse(apiClient.get<ApiResponse<BatchCollectionPoint[]>>(endpoints.reports.batchCollection)),
   feeStatusBreakdown: () =>

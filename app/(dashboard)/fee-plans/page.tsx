@@ -25,16 +25,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField } from "@/components/forms/form-field";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { getChartColor } from "@/lib/constants/chart-colors";
 import { OrganizationScopeBanner } from "@/components/shared/organization-scope-banner";
 import { useAuth } from "@/providers/auth-provider";
 import { MetricCard } from "@/components/cards/metric-card";
+import { useSavedFilterPresets } from "@/hooks/use-saved-filter-presets";
 
 export default function FeePlansPage() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
+  const [selectedPresetId, setSelectedPresetId] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 10;
   const [open, setOpen] = useState(false);
@@ -42,6 +45,9 @@ export default function FeePlansPage() {
   const canCreate = usePermission("fees.create");
   const canMutateWithinScope = Boolean(user?.organizationId);
   const queryClient = useQueryClient();
+  const savedFeePlanFilterPresets = useSavedFilterPresets<{
+    search: string;
+  }>("fee-plans-filter-presets");
 
   const plansQuery = useQuery({
     queryKey: ["fees", "plans", pageIndex, pageSize],
@@ -148,7 +154,7 @@ export default function FeePlansPage() {
           id: "actions",
           header: "Actions",
           cell: ({ row }) => (
-            <Button variant="ghost" size="sm" onClick={() => setSelectedPlan(row.original)}>
+            <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedPlan(row.original)}>
               View
             </Button>
           ),
@@ -253,7 +259,7 @@ export default function FeePlansPage() {
                 </DialogHeader>
                 <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
                   <FormField label="Student" required error={form.formState.errors.studentId}>
-                    <select className="h-10 rounded-xl border px-3" {...form.register("studentId")}>
+                    <select className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("studentId")}>
                       <option value="">Select student</option>
                       {studentsQuery.data.items.map((student) => (
                         <option key={student.id} value={student.id}>
@@ -263,7 +269,7 @@ export default function FeePlansPage() {
                     </select>
                   </FormField>
                   <FormField label="Batch" error={form.formState.errors.batchId}>
-                    <select className="h-10 rounded-xl border px-3" {...form.register("batchId")}>
+                    <select className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm" {...form.register("batchId")}>
                       <option value="">Optional batch</option>
                       {batchesQuery.data.items.map((batch) => (
                         <option key={batch.id} value={batch.id}>
@@ -292,6 +298,64 @@ export default function FeePlansPage() {
           ) : null
         }
       />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] border border-border/70 bg-card/85 px-4 py-3 text-sm shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Saved views</span>
+          <Select
+            value={selectedPresetId}
+            onValueChange={(presetId) => {
+              const preset = savedFeePlanFilterPresets.presets.find((item) => item.id === presetId);
+              if (!preset) return;
+              setSearch(preset.value.search);
+              setSelectedPresetId(preset.id);
+              setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select saved view" />
+            </SelectTrigger>
+            <SelectContent>
+              {savedFeePlanFilterPresets.presets.length === 0 ? (
+                <SelectItem value="__none" disabled>
+                  No saved views yet
+                </SelectItem>
+              ) : (
+                savedFeePlanFilterPresets.presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const name = window.prompt("Save the current fee plan search as:");
+              const preset = name ? savedFeePlanFilterPresets.savePreset(name, { search }) : null;
+              if (preset) {
+                setSelectedPresetId(preset.id);
+                toast.success(`Saved view "${preset.name}"`);
+              }
+            }}
+          >
+            Save current view
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              savedFeePlanFilterPresets.clearPresets();
+              setSelectedPresetId("");
+              toast.success("Saved fee plan views cleared");
+            }}
+            disabled={savedFeePlanFilterPresets.presets.length === 0}
+          >
+            Clear saved views
+          </Button>
+        </div>
+      </div>
       <DataTable
         data={plansQuery.data.items}
         columns={columns}

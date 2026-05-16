@@ -1,0 +1,1 @@
+export const ONLINE_CLASSES_ENABLED = process.env.NEXT_PUBLIC_ONLINE_CLASSES_ENABLED === "true";

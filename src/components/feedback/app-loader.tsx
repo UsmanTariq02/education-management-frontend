@@ -22,7 +22,7 @@ export function AppLoader({
         className,
       )}
     >
-      <div className="relative w-full max-w-xl overflow-hidden rounded-[2rem] border bg-card/95 p-8 shadow-xl">
+      <div className="relative w-full max-w-xl overflow-hidden rounded-[2rem] border border-border/70 bg-card/95 p-8 shadow-xl shadow-slate-900/5 backdrop-blur">
         <div className="absolute inset-0 bg-[size:24px_24px] bg-grid-fade opacity-40" />
         <div className="relative space-y-8">
           <div className="mx-auto flex w-fit items-center gap-4 rounded-full border bg-background/80 px-5 py-3 shadow-sm">
@@ -53,7 +53,7 @@ export function AppLoader({
               "Checking permissions",
               "Rendering dashboards",
             ].map((label) => (
-              <div key={label} className="rounded-2xl border bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+              <div key={label} className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
                 {label}
               </div>
             ))}

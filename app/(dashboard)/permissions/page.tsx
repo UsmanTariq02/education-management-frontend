@@ -38,7 +38,7 @@ export default function PermissionsPage() {
       />
       <div className="grid gap-6 lg:grid-cols-2">
         {Object.entries(grouped).map(([module, permissions]) => (
-          <Card key={module}>
+          <Card key={module} className="border-border/70 bg-card/85 shadow-sm backdrop-blur">
             <CardHeader>
               <CardTitle className="capitalize">{module}</CardTitle>
             </CardHeader>

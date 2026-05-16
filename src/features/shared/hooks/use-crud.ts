@@ -11,6 +11,7 @@ interface CrudOptions<TList, TCreate, TUpdate> {
   createFn?: (payload: TCreate) => Promise<unknown>;
   updateFn?: (id: string, payload: TUpdate) => Promise<unknown>;
   deleteFn?: (id: string) => Promise<unknown>;
+  bulkDeleteFn?: (ids: string[]) => Promise<unknown>;
   params: PaginationParams;
 }
 
@@ -26,7 +27,8 @@ export function useCrudMutations<TCreate, TUpdate>({
   createFn,
   updateFn,
   deleteFn,
-}: Pick<CrudOptions<never, TCreate, TUpdate>, "queryKey" | "createFn" | "updateFn" | "deleteFn">) {
+  bulkDeleteFn,
+}: Pick<CrudOptions<never, TCreate, TUpdate>, "queryKey" | "createFn" | "updateFn" | "deleteFn" | "bulkDeleteFn">) {
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
@@ -65,9 +67,22 @@ export function useCrudMutations<TCreate, TUpdate>({
     onError: (error) => toast.error(normalizeApiError(error).message),
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!bulkDeleteFn) throw new Error("bulkDeleteFn is not configured");
+      return bulkDeleteFn(ids);
+    },
+    onSuccess: () => {
+      toast.success("Selected records deleted successfully");
+      queryClient.invalidateQueries({ queryKey });
+    },
+    onError: (error) => toast.error(normalizeApiError(error).message),
+  });
+
   return {
     createMutation,
     updateMutation,
     deleteMutation,
+    bulkDeleteMutation,
   };
 }

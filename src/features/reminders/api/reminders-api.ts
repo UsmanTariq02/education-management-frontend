@@ -3,6 +3,7 @@ import { endpoints } from "@/lib/api/endpoints";
 import { buildQueryParams } from "@/lib/api/query-utils";
 import type { ApiResponse, PaginatedResult, PaginationParams } from "@/types/api";
 import type {
+  BulkDeleteDto,
   CreateReminderLogDto,
   CreateReminderRuleDto,
   CreateReminderTemplateDto,
@@ -24,6 +25,10 @@ export const remindersApi = {
     unwrapResponse(apiClient.patch<ApiResponse<ReminderLog>>(endpoints.reminders.detail(id), payload)),
   remove: (id: string) =>
     unwrapResponse(apiClient.delete<ApiResponse<{ deleted: boolean }>>(endpoints.reminders.detail(id))),
+  bulkRemove: (ids: string[]) =>
+    unwrapResponse(
+      apiClient.post<ApiResponse<{ deletedCount: number }>>(endpoints.reminders.bulkDelete, { ids } satisfies BulkDeleteDto),
+    ),
   listTemplates: (params: PaginationParams) =>
     unwrapResponse(
       apiClient.get<ApiResponse<PaginatedResult<ReminderTemplate>>>(

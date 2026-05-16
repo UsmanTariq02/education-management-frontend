@@ -1,12 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import { useSearchParams } from "next/navigation";
+import { Banknote, BookOpen, Repeat, ShieldCheck } from "lucide-react";
 import { activityLogsApi } from "@/features/activity-logs/api/activity-logs-api";
+import { MetricCard } from "@/components/cards/metric-card";
 import { usePermission } from "@/hooks/use-permission";
 import type { ActivityLog } from "@/types/domain";
 import { DataTable } from "@/components/tables/data-table";
+import { DetailItem } from "@/components/shared/detail-item";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -18,7 +22,26 @@ import { formatDate } from "@/lib/formatters";
 import { useAuth } from "@/providers/auth-provider";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
-const MODULE_OPTIONS = ["auth", "users", "roles", "students", "batches", "fees", "attendance", "reminders"] as const;
+const MODULE_OPTIONS = [
+  "auth",
+  "users",
+  "roles",
+  "students",
+  "batches",
+  "fees",
+  "attendance",
+  "reminders",
+  "assignments",
+  "assessments",
+  "exams",
+  "exam-results",
+  "timetables",
+  "online-classes",
+  "organizations",
+  "media",
+  "academic-sessions",
+  "batch-subject-assignments",
+] as const;
 const ACTION_OPTIONS = [
   "login",
   "login-failed",
@@ -32,19 +55,48 @@ const ACTION_OPTIONS = [
   "create-record",
   "update-record",
   "delete-record",
+  "session-revoked",
+  "portal-access-upsert",
+  "import",
+  "status-update",
+  "bulk-delete",
+  "bulk-delete-records",
+  "bulk-status",
+  "bulk-publish",
+  "publish",
+  "unpublish",
+  "create-billing-entry",
+  "update-current",
+  "upload",
+  "generate-meet-link",
+  "google-meet-sync",
+  "participants-upsert",
+  "attendance-processed",
+  "reset-defaults",
+  "process-due-schedules",
+  "automation-cycle",
+  "automation-generated",
 ] as const;
 
 export default function ActivityLogsPage() {
   const { user } = useAuth();
   const canRead = usePermission("activity-logs.read");
-  const [search, setSearch] = useState("");
+  const searchParams = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams?.get("search") ?? "");
   const debouncedSearch = useDebouncedValue(search);
-  const [moduleFilter, setModuleFilter] = useState("");
-  const [actionFilter, setActionFilter] = useState("");
+  const [moduleFilter, setModuleFilter] = useState(() => searchParams?.get("module") ?? "");
+  const [actionFilter, setActionFilter] = useState(() => searchParams?.get("action") ?? "");
   const [pageIndex, setPageIndex] = useState(0);
   const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }]);
   const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
   const pageSize = 12;
+
+  useEffect(() => {
+    setSearch(searchParams?.get("search") ?? "");
+    setModuleFilter(searchParams?.get("module") ?? "");
+    setActionFilter(searchParams?.get("action") ?? "");
+    setPageIndex(0);
+  }, [searchParams]);
 
   const logsQuery = useQuery({
     queryKey: ["activity-logs", debouncedSearch, moduleFilter, actionFilter, pageIndex, pageSize, sorting],
@@ -129,7 +181,7 @@ export default function ActivityLogsPage() {
         id: "view",
         header: "View",
         cell: ({ row }) => (
-          <Button variant="ghost" size="sm" onClick={() => setSelectedLog(row.original)}>
+          <Button variant="outline" size="sm" className="rounded-full px-3 shadow-sm hover:border-primary/40 hover:bg-primary/5" onClick={() => setSelectedLog(row.original)}>
             View
           </Button>
         ),
@@ -154,6 +206,18 @@ export default function ActivityLogsPage() {
       })),
     [logsQuery.data],
   );
+  const activityPulse = useMemo(() => {
+    const items = logsQuery.data?.items ?? [];
+    return {
+      total: items.length,
+      bulkActions: items.filter((item) => item.action.startsWith("bulk-")).length,
+      authEvents: items.filter((item) => item.module === "auth").length,
+      billingEvents: items.filter((item) => item.module === "fees").length,
+      academicEvents: items.filter((item) =>
+        ["students", "batches", "academic-sessions", "subjects", "teachers", "batch-subject-assignments", "timetables", "exams", "assessments", "assignments", "exam-results"].includes(item.module),
+      ).length,
+    };
+  }, [logsQuery.data]);
 
   if (!canRead) {
     return <ErrorState title="Access denied" description="You do not have permission to review activity logs." />;
@@ -182,7 +246,7 @@ export default function ActivityLogsPage() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <select
-              className="h-10 rounded-xl border bg-background px-3 text-sm"
+              className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm"
               value={moduleFilter}
               onChange={(event) => {
                 setModuleFilter(event.target.value);
@@ -197,7 +261,7 @@ export default function ActivityLogsPage() {
               ))}
             </select>
             <select
-              className="h-10 rounded-xl border bg-background px-3 text-sm"
+              className="h-10 rounded-2xl border border-border/70 bg-background px-3 text-sm shadow-sm"
               value={actionFilter}
               onChange={(event) => {
                 setActionFilter(event.target.value);
@@ -214,6 +278,82 @@ export default function ActivityLogsPage() {
           </div>
         }
       />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setModuleFilter("auth");
+            setActionFilter("");
+            setPageIndex(0);
+          }}
+        >
+          Auth events
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setModuleFilter("");
+            setActionFilter("bulk-delete");
+            setPageIndex(0);
+          }}
+        >
+          Bulk deletes
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setModuleFilter("");
+            setActionFilter("bulk-status");
+            setPageIndex(0);
+          }}
+        >
+          Bulk status
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setModuleFilter("");
+            setActionFilter("bulk-publish");
+            setPageIndex(0);
+          }}
+        >
+          Bulk publish
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setModuleFilter("fees");
+            setActionFilter("");
+            setPageIndex(0);
+          }}
+        >
+          Billing events
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setModuleFilter("");
+            setActionFilter("");
+            setSearch("");
+            setPageIndex(0);
+          }}
+        >
+          Reset filters
+        </Button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MetricCard title="Loaded logs" value={String(activityPulse.total)} helper="Current page records" icon={ShieldCheck} tone="sky" />
+        <MetricCard title="Bulk actions" value={String(activityPulse.bulkActions)} helper="bulk-* events on this page" icon={Repeat} tone="violet" />
+        <MetricCard title="Auth events" value={String(activityPulse.authEvents)} helper="login, logout, refresh, and session events" icon={ShieldCheck} tone="emerald" />
+        <MetricCard title="Billing events" value={String(activityPulse.billingEvents)} helper="Fee-plan and fee-record activity" icon={Banknote} tone="amber" />
+        <MetricCard title="Academic events" value={String(activityPulse.academicEvents)} helper="Academic module activity on this page" icon={BookOpen} tone="amber" />
+      </div>
       <DataTable
         data={logsQuery.data.items}
         columns={columns}
@@ -247,7 +387,7 @@ export default function ActivityLogsPage() {
                 />
                 <DetailItem label="Target" value={selectedLog.targetId ?? "General"} />
               </div>
-              <div className="rounded-xl border bg-muted/30 p-4">
+              <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 shadow-sm">
                 <p className="mb-2 font-medium">Complete details</p>
                 <pre className="whitespace-pre-wrap break-all text-xs text-muted-foreground">
                   {JSON.stringify(selectedLog.metadata ?? {}, null, 2)}
@@ -257,15 +397,6 @@ export default function ActivityLogsPage() {
           ) : null}
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border bg-muted/30 p-3">
-      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-1 font-medium">{value}</p>
     </div>
   );
 }

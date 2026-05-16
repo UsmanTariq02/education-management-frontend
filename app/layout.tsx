@@ -11,14 +11,17 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: APP_NAME,
+  title: {
+    default: APP_NAME,
+    template: `%s | ${APP_NAME}`,
+  },
   description: "Education Management SaaS for modern schools, academies, and institutes.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={manrope.variable}>
+      <body className={`${manrope.variable} font-sans`}>
         <AppProvider>{children}</AppProvider>
         <Analytics />
       </body>

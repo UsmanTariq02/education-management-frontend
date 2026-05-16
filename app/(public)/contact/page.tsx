@@ -4,20 +4,21 @@ import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { CalendarCheck2, Mail, MapPin, PhoneCall, Rocket, UsersRound } from "lucide-react";
+import { CalendarCheck2, Mail, MapPin, PhoneCall, Rocket, UsersRound, WandSparkles } from "lucide-react";
 import { toast } from "sonner";
 import { inquiriesApi } from "@/features/inquiries/api/inquiries-api";
 import { contactInquirySchema, type ContactInquirySchema } from "@/features/inquiries/schemas/contact-inquiry-schema";
 import { normalizeApiError } from "@/lib/api/errors";
+import { publicModuleOptions } from "@/lib/marketing/module-catalog";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/forms/form-field";
-
-const moduleOptions = ["Students", "Batches / classes", "Fees", "Attendance", "Reminders", "Reports"] as const;
 
 export default function ContactPage() {
   const form = useForm<ContactInquirySchema>({
@@ -29,7 +30,7 @@ export default function ContactPage() {
       phone: "",
       institutionType: "School",
       expectedUserCount: "1-10",
-      requestedModules: ["Students", "Fees", "Attendance"],
+      requestedModules: ["Students", "Fee plans and collections", "Attendance"],
       inquiryType: "Product demo",
       message: "",
     },
@@ -46,7 +47,7 @@ export default function ContactPage() {
         phone: "",
         institutionType: "School",
         expectedUserCount: "1-10",
-        requestedModules: ["Students", "Fees", "Attendance"],
+        requestedModules: ["Students", "Fee plans and collections", "Attendance"],
         inquiryType: "Product demo",
         message: "",
       });
@@ -55,109 +56,135 @@ export default function ContactPage() {
   });
 
   return (
-    <main className="container space-y-16 py-16">
-      <section className="grid gap-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
-        <div className="space-y-6">
-          <Badge>Contact</Badge>
-          <PageHeader
-            eyebrow="Sales, demos, and onboarding"
-            title="Talk to the team that helps institutions turn operational chaos into one governed system."
-            description="Use this page for product walkthroughs, pricing discussions, rollout planning, CSV migration conversations, and multi-organization onboarding."
-          />
-          <div className="grid gap-4">
-            {[
-              {
-                title: "Email",
-                value: "hello@eduflow.local",
-                description: "Best for commercial questions, proposal requests, and product-fit discussions.",
-                icon: Mail,
-              },
-              {
-                title: "Phone",
-                value: "+92 300 0000000",
-                description: "Useful for direct implementation and stakeholder conversations.",
-                icon: PhoneCall,
-              },
-              {
-                title: "Coverage",
-                value: "Schools, colleges, academies, education groups",
-                description: "Single-campus and multi-tenant rollouts are both supported.",
-                icon: MapPin,
-              },
-            ].map((item) => {
-              const Icon = item.icon;
-              return (
-                <Card key={item.title}>
-                  <CardContent className="flex gap-4 p-5">
-                    <div className="rounded-2xl bg-primary/10 p-3 text-primary">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="font-medium">{item.title}</p>
-                      <p className="text-sm">{item.value}</p>
-                      <p className="text-sm text-muted-foreground">{item.description}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-          <Card className="border-primary/20 bg-primary/5">
-            <CardContent className="p-5 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">Quick pricing reminder</p>
-              <p className="mt-2">
-                Commercial estimates are based on <span className="font-semibold text-foreground">$1 per module per user</span>. If you share the
-                expected number of users and the modules you need, the team can estimate your monthly SaaS footprint quickly.
-              </p>
+    <main className="relative isolate overflow-hidden">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[26rem] bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.08),_transparent_28%)]" />
+      <div className="container relative space-y-16 py-16">
+        <section className="grid gap-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
+          <div className="space-y-6">
+            <Badge>Contact</Badge>
+            <PageHeader
+              eyebrow="Sales, demos, and onboarding"
+              title="Talk to the team that helps institutions turn operational chaos into one governed system."
+              description="Use this page for product walkthroughs, pricing discussions, AI automation scoping, rollout planning, CSV migration conversations, and multi-organization onboarding."
+            />
+            <div className="grid gap-4">
+              {[
+                {
+                  title: "Email",
+                  value: "hello@eduflow.local",
+                  description: "Best for commercial questions, proposal requests, and product-fit discussions.",
+                  icon: Mail,
+                },
+                {
+                  title: "Phone",
+                  value: "+92 300 0000000",
+                  description: "Useful for direct implementation and stakeholder conversations.",
+                  icon: PhoneCall,
+                },
+                {
+                  title: "Coverage",
+                  value: "Schools, colleges, academies, education groups",
+                  description: "Single-campus and multi-tenant rollouts are both supported.",
+                  icon: MapPin,
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Card key={item.title} className="border-border/70 bg-card/85 shadow-sm backdrop-blur transition hover:-translate-y-1 hover:shadow-lg">
+                    <CardContent className="flex gap-4 p-5">
+                      <div className="rounded-2xl bg-primary/10 p-3 text-primary shadow-sm">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-medium">{item.title}</p>
+                        <p className="text-sm">{item.value}</p>
+                        <p className="text-sm text-muted-foreground">{item.description}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+            <Card className="border-primary/20 bg-primary/5 shadow-sm">
+              <CardContent className="p-5 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">Quick pricing reminder</p>
+                <p className="mt-2">
+                  Commercial estimates are based on <span className="font-semibold text-foreground">$1 per module per user</span>. If you share the
+                  expected number of users, the modules you need, and whether you want AI automation turned on, the team can estimate your monthly SaaS footprint quickly and see where automation can reduce manual workload.
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/70 bg-card/85 shadow-sm backdrop-blur">
+              <CardContent className="p-5 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">What to include</p>
+                <ul className="mt-3 space-y-2">
+                  <li>• Number of campuses or organizations</li>
+                  <li>• Estimated operational users</li>
+                  <li>• Modules you want to start with</li>
+                  <li>• Any AI automation or approval workflow requirements</li>
+                  <li>• Migration notes for student, fee, or attendance data</li>
+                </ul>
+              </CardContent>
+            </Card>
+            <Card className="border-border/70 bg-card/85 shadow-sm backdrop-blur">
+              <CardContent className="flex gap-4 p-5">
+                <div className="rounded-2xl bg-primary/10 p-3 text-primary shadow-sm">
+                  <WandSparkles className="h-5 w-5" />
+                </div>
+                <div className="space-y-1">
+                <p className="font-medium">AI automation scoping</p>
+                <p className="text-sm text-muted-foreground">
+                    We can scope notice drafts, mail replies, support responses, admission extraction, reminder drafting, and intervention suggestions with the right approval gates so your team handles less repetitive work.
+                </p>
+              </div>
             </CardContent>
           </Card>
-        </div>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Share your rollout context</CardTitle>
-            <CardDescription>
-              This form now captures a real inquiry record for demos, pricing discussions, implementation planning, migration questions, and multi-organization onboarding.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-              <FormField label="Full name" required error={form.formState.errors.fullName}>
-                <Input {...form.register("fullName")} placeholder="Enter your name" />
-              </FormField>
-              <FormField label="Work email" required error={form.formState.errors.email}>
-                <Input type="email" {...form.register("email")} placeholder="name@institution.edu" />
-              </FormField>
-              <FormField label="Institution name" required error={form.formState.errors.institutionName}>
-                <Input {...form.register("institutionName")} placeholder="Green Valley College" />
-              </FormField>
-              <FormField label="Phone" error={form.formState.errors.phone}>
-                <Input {...form.register("phone")} placeholder="+92..." />
-              </FormField>
-              <FormField label="Institution type" required error={form.formState.errors.institutionType}>
-                <select className="h-10 rounded-xl border px-3 text-sm" {...form.register("institutionType")}>
-                  <option>School</option>
-                  <option>College</option>
-                  <option>Academy</option>
-                  <option>Training institute</option>
-                  <option>Education group</option>
-                </select>
-              </FormField>
-              <FormField label="Expected operational users" required error={form.formState.errors.expectedUserCount}>
-                <select className="h-10 rounded-xl border px-3 text-sm" {...form.register("expectedUserCount")}>
-                  <option>1-10</option>
-                  <option>11-25</option>
-                  <option>26-50</option>
-                  <option>50+</option>
-                </select>
-              </FormField>
-              <div className="space-y-2 md:col-span-2">
-                <p className="text-sm font-medium">Required modules</p>
-                <div className="grid gap-2 rounded-xl border p-4 sm:grid-cols-2">
-                  {moduleOptions.map((module) => (
-                    <label key={module} className="flex items-center gap-3 text-sm">
-                      <input
-                        type="checkbox"
+          <Card className="border-border/70 bg-card/85 shadow-sm backdrop-blur">
+            <CardHeader>
+              <CardTitle>Share your rollout context</CardTitle>
+              <CardDescription>
+                This form now captures a real inquiry ticket for demos, pricing discussions, implementation planning, migration questions, AI automation, and multi-organization onboarding.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-4 md:grid-cols-2" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+                <FormField label="Full name" required error={form.formState.errors.fullName}>
+                  <Input {...form.register("fullName")} placeholder="Enter your name" />
+                </FormField>
+                <FormField label="Work email" required error={form.formState.errors.email}>
+                  <Input type="email" {...form.register("email")} placeholder="name@institution.edu" />
+                </FormField>
+                <FormField label="Institution name" required error={form.formState.errors.institutionName}>
+                  <Input {...form.register("institutionName")} placeholder="Green Valley College" />
+                </FormField>
+                <FormField label="Phone" error={form.formState.errors.phone}>
+                  <Input {...form.register("phone")} placeholder="+92..." />
+                </FormField>
+                <FormField label="Institution type" required error={form.formState.errors.institutionType}>
+                  <NativeSelect {...form.register("institutionType")}>
+                    <option>School</option>
+                    <option>College</option>
+                    <option>Academy</option>
+                    <option>Training institute</option>
+                    <option>Education group</option>
+                  </NativeSelect>
+                </FormField>
+                <FormField label="Expected operational users" required error={form.formState.errors.expectedUserCount}>
+                  <NativeSelect {...form.register("expectedUserCount")}>
+                    <option>1-10</option>
+                    <option>11-25</option>
+                    <option>26-50</option>
+                    <option>50+</option>
+                  </NativeSelect>
+                </FormField>
+                <div className="space-y-2 md:col-span-2">
+                  <p className="text-sm font-medium">Required modules</p>
+                  <div className="grid gap-2 rounded-2xl border border-border/70 bg-muted/20 p-4 sm:grid-cols-2">
+                    {publicModuleOptions.map((module) => (
+                      <Checkbox
+                        key={module}
                         checked={form.watch("requestedModules").includes(module)}
                         onChange={(event) => {
                           const current = form.getValues("requestedModules");
@@ -167,46 +194,46 @@ export default function ContactPage() {
                             { shouldDirty: true, shouldValidate: true },
                           );
                         }}
+                        label={module}
                       />
-                      <span>{module}</span>
-                    </label>
-                  ))}
+                    ))}
+                  </div>
+                  {form.formState.errors.requestedModules ? (
+                    <p className="text-xs text-destructive">{form.formState.errors.requestedModules.message}</p>
+                  ) : null}
                 </div>
-                {form.formState.errors.requestedModules ? (
-                  <p className="text-xs text-destructive">{form.formState.errors.requestedModules.message}</p>
-                ) : null}
-              </div>
-              <FormField label="What do you need help with?" required error={form.formState.errors.inquiryType} className="md:col-span-2">
-                <select className="h-10 rounded-xl border px-3 text-sm" {...form.register("inquiryType")}>
-                  <option>Product demo</option>
-                  <option>Pricing estimate</option>
-                  <option>Implementation planning</option>
-                  <option>Multi-tenant rollout</option>
-                  <option>Migration from current system</option>
-                </select>
-              </FormField>
-              <FormField label="Message" required error={form.formState.errors.message} className="md:col-span-2">
-                <Textarea
-                  rows={7}
-                  {...form.register("message")}
-                  placeholder="Tell us about your current student volume, number of campuses, fee process, attendance workflow, and the modules you want to launch first."
-                />
-              </FormField>
-              <div className="md:col-span-2 flex justify-end">
-                <Button type="submit" disabled={mutation.isPending}>
-                  {mutation.isPending ? "Submitting..." : "Submit inquiry"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      </section>
+                <FormField label="What do you need help with?" required error={form.formState.errors.inquiryType} className="md:col-span-2">
+                  <NativeSelect {...form.register("inquiryType")}>
+                    <option>Product demo</option>
+                    <option>Pricing estimate</option>
+                    <option>Implementation planning</option>
+                    <option>Multi-tenant rollout</option>
+                    <option>Migration from current system</option>
+                    <option>AI automation setup</option>
+                  </NativeSelect>
+                </FormField>
+                <FormField label="Message" required error={form.formState.errors.message} className="md:col-span-2">
+                  <Textarea
+                    rows={7}
+                    {...form.register("message")}
+                    placeholder="Tell us about your current student volume, number of campuses, fee process, attendance workflow, the modules you want to launch first, and any AI automation workflows you want to review."
+                  />
+                </FormField>
+                <div className="md:col-span-2 flex justify-end">
+                  <Button type="submit" className="shadow-sm shadow-primary/15" disabled={mutation.isPending}>
+                    {mutation.isPending ? "Submitting..." : "Submit inquiry"}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </section>
 
-      <section className="grid gap-6 lg:grid-cols-3">
+        <section className="grid gap-6 lg:grid-cols-3">
         {[
           {
             title: "Demo calls",
-            description: "Best for schools or colleges evaluating how students, fees, attendance, reminders, and reports work together.",
+            description: "Best for schools or colleges evaluating how students, fees, attendance, reminders, AI drafts, and reports work together.",
             icon: CalendarCheck2,
           },
           {
@@ -222,9 +249,9 @@ export default function ContactPage() {
         ].map((item) => {
           const Icon = item.icon;
           return (
-            <Card key={item.title}>
+            <Card key={item.title} className="border-border/70 bg-card/85 shadow-sm backdrop-blur transition hover:-translate-y-1 hover:shadow-lg">
               <CardHeader>
-                <div className="mb-3 inline-flex rounded-2xl bg-primary/10 p-3 text-primary">
+                <div className="mb-3 inline-flex rounded-2xl bg-primary/10 p-3 text-primary shadow-sm">
                   <Icon className="h-5 w-5" />
                 </div>
                 <CardTitle>{item.title}</CardTitle>
@@ -232,30 +259,31 @@ export default function ContactPage() {
               </CardHeader>
             </Card>
           );
-        })}
-      </section>
+          })}
+        </section>
 
-      <section>
-        <Card className="bg-muted/50">
-          <CardContent className="flex flex-col gap-6 p-8 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-2">
-              <p className="text-sm uppercase tracking-[0.24em] text-primary">Helpful before the call</p>
-              <h2 className="text-3xl font-semibold">Bring your expected user count, required modules, and current operational pain points.</h2>
-              <p className="text-sm text-muted-foreground">
-                That is usually enough to structure the right product discussion and give a realistic pricing estimate.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button asChild>
-                <Link href="/pricing">Review pricing model</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/about">Read platform overview</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
+        <section>
+          <Card className="border-border/70 bg-muted/50 shadow-sm">
+            <CardContent className="flex flex-col gap-6 p-8 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-2">
+                <p className="text-sm uppercase tracking-[0.24em] text-primary">Helpful before the call</p>
+                <h2 className="text-3xl font-semibold">Bring your expected user count, required modules, and current operational pain points.</h2>
+                <p className="text-sm text-muted-foreground">
+                  That is usually enough to structure the right product discussion, show where AI can reduce manual work, and give a realistic pricing estimate.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button asChild>
+                  <Link href="/pricing">Review pricing model</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/about">Read platform overview</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
     </main>
   );
 }
